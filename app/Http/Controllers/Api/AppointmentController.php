@@ -44,6 +44,14 @@ class AppointmentController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
+        // Cliente logado nunca agenda em nome de outro cliente, mesmo que envie outro id.
+        if ($request->user()->role === 'customer') {
+            $data['client_id'] = Client::where('tenant_id', $tenantId)
+                ->where('user_id', $request->user()->id)
+                ->firstOrFail()
+                ->id;
+        }
+
         $client = Client::where('tenant_id', $tenantId)->findOrFail($data['client_id']);
         $professional = Professional::where('tenant_id', $tenantId)->where('is_active', true)->findOrFail($data['professional_id']);
         $service = Service::where('tenant_id', $tenantId)->where('is_active', true)->findOrFail($data['service_id']);
@@ -106,6 +114,11 @@ class AppointmentController extends Controller
     {
         abort_if($appointment->tenant_id !== $this->tenantId($request), 404);
         abort_if($appointment->status === 'canceled', 422, 'Agendamento cancelado nao pode ser concluido.');
+
+        // Profissional so conclui os proprios atendimentos; proprietario conclui qualquer um.
+        if ($request->user()->role === 'professional') {
+            abort_if($appointment->professional?->user_id !== $request->user()->id, 403, 'Voce so pode concluir os proprios atendimentos.');
+        }
 
         $appointment = $this->transaction(function () use ($appointment) {
             $appointment->update(['status' => 'completed']);

@@ -44,10 +44,10 @@ Objetivo: validar o modelo de assinatura com estabelecimentos reais, usando cont
 - [x] Comentarios de manutencao em portugues do Brasil
 - [x] Tratamento global de excecoes JSON para API
 - [x] Transacoes explicitas com commit e rollback nos fluxos de escrita
-- [ ] Regras de acesso por papel em middleware/policies
-- [ ] Seeds de demonstracao
-- [ ] Cobertura de testes para inadimplencia, limite de uso e restricoes de horario
-- [ ] Documentacao de payloads da API
+- [x] Regras de acesso por papel em middleware/policies
+- [x] Seeds de demonstracao
+- [x] Cobertura de testes para inadimplencia, limite de uso e restricoes de horario
+- [x] Documentacao de payloads da API
 
 ### Criterios de aceite
 
@@ -56,7 +56,7 @@ Objetivo: validar o modelo de assinatura com estabelecimentos reais, usando cont
 - [x] `php artisan route:list --path=api` lista rotas esperadas
 - [x] Teste automatizado cobre rollback em falha de plano
 - [x] Teste automatizado cobre erro JSON padronizado
-- [ ] Fluxo completo testado via cliente HTTP
+- [x] Fluxo completo testado via cliente HTTP
 - [ ] Validacao funcional com ao menos 1 estabelecimento piloto
 
 ### Auditoria da fase
@@ -65,6 +65,7 @@ Objetivo: validar o modelo de assinatura com estabelecimentos reais, usando cont
 |---|---|---|---|---|
 | 2026-07-03 | Codex | Parcial aprovado | Migracoes, rotas e teste de fluxo principal passaram | Regras por papel, seeds, docs de payload e testes adicionais |
 | 2026-07-03 | Codex | Parcial aprovado | Comentarios em PT-BR, handler global de excecoes, transacoes explicitas e testes de rollback/JSON | Ainda faltam policies por papel e testes de regras negativas especificas |
+| 2026-07-03 | Claude | Parcial aprovado | Middleware `role` por papel (owner/professional/customer) aplicado nas rotas; login opcional para profissional e cliente (gap que bloqueava o Flutter); seeds de demonstracao com os 3 papeis e dados espelhando os mocks do app; 10 novos testes cobrindo inadimplencia, limite de uso, restricao de dia/horario e autorizacao por papel (15/15 passando); `docs/api.md` com contrato de payloads | Falta validacao com estabelecimento piloto real; integracao ainda nao foi feita no lado Flutter (app mobile continua mockado) |
 
 ## Fase 1 - Cobranca Automatica e Base Operacional
 

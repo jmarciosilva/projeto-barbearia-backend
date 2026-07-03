@@ -28,16 +28,33 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
+    // Dados basicos do estabelecimento sao visiveis para qualquer papel autenticado.
     Route::get('/tenant', [TenantController::class, 'show']);
-    Route::patch('/tenant', [TenantController::class, 'update']);
 
-    Route::apiResource('professionals', ProfessionalController::class)->only(['index', 'store', 'update']);
-    Route::apiResource('clients', ClientController::class)->only(['index', 'store', 'update']);
-    Route::apiResource('services', ServiceController::class)->only(['index', 'store', 'update']);
-    Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['index', 'store', 'update']);
-    Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['index', 'store', 'update']);
-    Route::apiResource('appointments', AppointmentController::class)->only(['index', 'store', 'update']);
-    Route::post('/appointments/{appointment}/complete', [AppointmentController::class, 'complete']);
-    Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
-    Route::post('/payments/{payment}/mark-paid', [PaymentController::class, 'markPaid']);
+    // Agendar e uma acao de qualquer papel; cliente so consegue agendar para si mesmo
+    // (regra aplicada dentro do AppointmentController, nao aqui).
+    Route::post('/appointments', [AppointmentController::class, 'store']);
+
+    // Operacao do dia a dia do salao: proprietario e profissional compartilham leitura
+    // e as acoes de atendimento, mas nao a gestao de catalogo/financeiro.
+    Route::middleware('role:owner,professional')->group(function () {
+        Route::apiResource('professionals', ProfessionalController::class)->only(['index']);
+        Route::apiResource('clients', ClientController::class)->only(['index', 'store', 'update']);
+        Route::apiResource('services', ServiceController::class)->only(['index']);
+        Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['index']);
+        Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['index', 'store']);
+        Route::apiResource('appointments', AppointmentController::class)->only(['index', 'update']);
+        Route::post('/appointments/{appointment}/complete', [AppointmentController::class, 'complete']);
+    });
+
+    // Gestao de catalogo, financeiro e estabelecimento e exclusiva do proprietario.
+    Route::middleware('role:owner')->group(function () {
+        Route::patch('/tenant', [TenantController::class, 'update']);
+        Route::apiResource('professionals', ProfessionalController::class)->only(['store', 'update']);
+        Route::apiResource('services', ServiceController::class)->only(['store', 'update']);
+        Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['store', 'update']);
+        Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['update']);
+        Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
+        Route::post('/payments/{payment}/mark-paid', [PaymentController::class, 'markPaid']);
+    });
 });

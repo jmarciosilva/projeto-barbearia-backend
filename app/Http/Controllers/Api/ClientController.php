@@ -6,7 +6,9 @@ use App\Http\Controllers\Api\Concerns\RunsDatabaseTransactions;
 use App\Http\Controllers\Api\Concerns\UsesTenant;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 
 class ClientController extends Controller
@@ -31,12 +33,36 @@ class ClientController extends Controller
             'phone' => ['required', 'string', 'max:30', Rule::unique('clients')->where('tenant_id', $tenantId)],
             'birth_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
+            'password' => ['nullable', 'string', 'min:8'],
         ]);
 
+        // Senha informada libera acesso ao app: exige email proprio e unico entre os logins.
+        if (! empty($data['password'])) {
+            $request->validate([
+                'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            ]);
+        }
+
         // Telefone e unico por estabelecimento para evitar duplicidade no atendimento.
-        $client = $this->transaction(fn () => Client::create($data + [
-            'tenant_id' => $tenantId,
-        ]));
+        $client = $this->transaction(function () use ($data, $tenantId) {
+            $user = null;
+
+            if (! empty($data['password'])) {
+                $user = User::create([
+                    'tenant_id' => $tenantId,
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'phone' => $data['phone'] ?? null,
+                    'role' => 'customer',
+                    'password' => $data['password'],
+                ]);
+            }
+
+            return Client::create(Arr::except($data, 'password') + [
+                'tenant_id' => $tenantId,
+                'user_id' => $user?->id,
+            ]);
+        });
 
         return response()->json($client, 201);
     }
