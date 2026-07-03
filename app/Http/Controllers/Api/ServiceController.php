@@ -16,7 +16,9 @@ class ServiceController extends Controller
 
     public function index(Request $request)
     {
+        // Cliente monta agendamento a partir desta lista; nao deve ver servico desativado.
         return Service::where('tenant_id', $this->tenantId($request))
+            ->when($request->user()->role === 'customer', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')
             ->get();
     }

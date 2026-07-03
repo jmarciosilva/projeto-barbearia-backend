@@ -35,12 +35,24 @@ Route::middleware('auth:sanctum')->group(function () {
     // (regra aplicada dentro do AppointmentController, nao aqui).
     Route::post('/appointments', [AppointmentController::class, 'store']);
 
+    // Auto-perfil: cada metodo confere o proprio papel internamente e nunca
+    // deixa um usuario ler/editar o registro de outra pessoa (mesmo padrao
+    // ja usado em AppointmentController::complete).
+    Route::get('/me/client', [ClientController::class, 'me']);
+    Route::get('/me/professional', [ProfessionalController::class, 'me']);
+    Route::patch('/me/professional', [ProfessionalController::class, 'updateSelf']);
+
+    // Catalogo de leitura para montar agendamento: tambem liberado ao cliente
+    // (filtrado a itens ativos dentro do controller).
+    Route::middleware('role:owner,professional,customer')->group(function () {
+        Route::apiResource('professionals', ProfessionalController::class)->only(['index']);
+        Route::apiResource('services', ServiceController::class)->only(['index']);
+    });
+
     // Operacao do dia a dia do salao: proprietario e profissional compartilham leitura
     // e as acoes de atendimento, mas nao a gestao de catalogo/financeiro.
     Route::middleware('role:owner,professional')->group(function () {
-        Route::apiResource('professionals', ProfessionalController::class)->only(['index']);
         Route::apiResource('clients', ClientController::class)->only(['index', 'store', 'update']);
-        Route::apiResource('services', ServiceController::class)->only(['index']);
         Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['index']);
         Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['index', 'store']);
         Route::apiResource('appointments', AppointmentController::class)->only(['index', 'update']);

@@ -61,9 +61,31 @@ Dados do estabelecimento do usuario logado (por `tenant_id`).
 { "name": "Novo nome", "address": "Rua X, 100", "city": "Sao Paulo", "state": "SP" }
 ```
 
+## Auto-perfil
+
+Cada rota abaixo confere o proprio papel do usuario logado internamente (nao usa o middleware `role:...`) e so le/edita o registro vinculado a ele mesmo — nunca o de outra pessoa.
+
+### `GET /me/client` — somente `customer`
+
+Ficha do cliente logado: dados basicos, `subscriptions.plan` e `subscriptions.usages.service` (historico de uso real). `403` para `owner`/`professional`.
+
+### `GET /me/professional` — somente `professional`
+
+Perfil do profissional logado (inclui `commission_percentage`, so leitura). `403` para `owner`/`customer`.
+
+### `PATCH /me/professional` — somente `professional`
+
+```json
+{ "name": "Ana Souza", "phone": "11988887777", "specialty": "Cortes e barba" }
+```
+
+Aceita apenas `name`, `email`, `phone`, `specialty`. **Nao** aceita `commission_percentage` nem `is_active` — esses campos continuam exclusivos do proprietario via `PUT /professionals/{id}`; se enviados, sao silenciosamente ignorados.
+
 ## Profissionais
 
-### `GET /professionals` — `owner`, `professional`
+### `GET /professionals` — `owner`, `professional`, `customer`
+
+Cliente ve somente profissionais com `is_active=true` (para montar agendamento); `owner`/`professional` veem todos.
 
 ### `POST /professionals` — somente `owner`
 
@@ -91,7 +113,7 @@ Mesmos campos do `store`, todos `sometimes`. Nao permite alterar senha/email de 
 
 ### `GET /clients` — `owner`, `professional`
 
-Inclui `subscriptions.plan`.
+Inclui `subscriptions.plan`. Lista o tenant inteiro — por isso e restrita a staff; cliente usa `GET /me/client` para ver so os proprios dados.
 
 ### `POST /clients` — `owner`, `professional`
 
@@ -114,7 +136,9 @@ Aceita tambem `status`: `active` | `inactive` | `blocked`.
 
 ## Servicos
 
-### `GET /services` — `owner`, `professional`
+### `GET /services` — `owner`, `professional`, `customer`
+
+Cliente ve somente servicos com `is_active=true`; `owner`/`professional` veem todos.
 
 ### `POST /services` / `PUT/PATCH /services/{id}` — somente `owner`
 
@@ -203,7 +227,7 @@ Conflito de horario do profissional tambem retorna `422` (`"Profissional ja poss
 
 ### `GET /appointments` — `owner`, `professional`
 
-Filtros opcionais via query string: `?from=2026-07-01&to=2026-07-31` (`starts_at` entre as datas).
+Filtros opcionais via query string: `?from=2026-07-01&to=2026-07-31` (`starts_at` entre as datas). Profissional recebe automaticamente so a propria agenda (filtrado pelo `Professional` vinculado ao login); proprietario ve a agenda inteira do estabelecimento. Nao existe listagem para `customer` — cliente ve os proprios agendamentos futuros apenas na resposta do `POST /appointments` que ele mesmo criar.
 
 ### `PUT/PATCH /appointments/{id}` — `owner`, `professional`
 

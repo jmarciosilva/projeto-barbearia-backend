@@ -85,4 +85,19 @@ class ClientController extends Controller
 
         return $client->fresh('subscriptions.plan');
     }
+
+    /**
+     * Ficha do cliente logado (plano, pagamento e historico de uso). E a
+     * unica forma de um `customer` ver os proprios dados — `GET /clients`
+     * fica restrito a owner/professional para nao vazar dados entre clientes.
+     */
+    public function me(Request $request)
+    {
+        abort_unless($request->user()->role === 'customer', 403, 'Somente clientes possuem esse perfil.');
+
+        return Client::where('tenant_id', $this->tenantId($request))
+            ->where('user_id', $request->user()->id)
+            ->with(['subscriptions.plan.services', 'subscriptions.usages.service'])
+            ->firstOrFail();
+    }
 }

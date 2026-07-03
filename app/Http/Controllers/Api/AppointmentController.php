@@ -24,8 +24,14 @@ class AppointmentController extends Controller
     {
         $tenantId = $this->tenantId($request);
 
+        // Profissional so ve a propria agenda, nunca a de colegas; proprietario ve tudo.
+        $ownProfessionalId = $request->user()->role === 'professional'
+            ? Professional::where('tenant_id', $tenantId)->where('user_id', $request->user()->id)->value('id')
+            : null;
+
         return Appointment::where('tenant_id', $tenantId)
             ->with(['client', 'professional', 'service', 'subscription.plan'])
+            ->when($ownProfessionalId, fn ($query, $professionalId) => $query->where('professional_id', $professionalId))
             ->when($request->query('from'), fn ($query, $from) => $query->where('starts_at', '>=', $from))
             ->when($request->query('to'), fn ($query, $to) => $query->where('starts_at', '<=', $to))
             ->orderBy('starts_at')
