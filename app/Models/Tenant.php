@@ -19,6 +19,7 @@ class Tenant extends Model
         'state',
         'timezone',
         'status',
+        'units_count',
     ];
 
     public function users(): HasMany

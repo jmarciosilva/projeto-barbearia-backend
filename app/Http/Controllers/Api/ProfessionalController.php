@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Professional;
 use App\Models\Service;
 use App\Models\User;
+use App\Support\PlanGate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
@@ -53,6 +54,16 @@ class ProfessionalController extends Controller
         if ($serviceIds) {
             $found = Service::where('tenant_id', $tenantId)->whereIn('id', $serviceIds)->count();
             abort_if($found !== count(array_unique($serviceIds)), 422, 'Um ou mais servicos nao pertencem ao estabelecimento.');
+        }
+
+        // Limite de profissionais do plano SaaS (spec 3): so vale pra quem entra ja ativo.
+        if ($data['is_active'] ?? true) {
+            $plan = PlanGate::for($tenantId)->currentPlan();
+            abort_if(
+                $plan && ! PlanGate::for($tenantId)->canAddProfessional(),
+                422,
+                "Limite de profissionais do plano {$plan->name} atingido ({$plan->max_professionals}). Faca upgrade para adicionar mais."
+            );
         }
 
         // Todo profissional criado pela API fica vinculado ao tenant autenticado.

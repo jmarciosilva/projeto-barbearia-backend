@@ -16,7 +16,7 @@ class TenantController extends Controller
 
     public function show(Request $request)
     {
-        return Tenant::with('saasSubscription')->findOrFail($this->tenantId($request));
+        return Tenant::with('saasSubscription.plan')->findOrFail($this->tenantId($request));
     }
 
     public function update(Request $request)
@@ -38,6 +38,6 @@ class TenantController extends Controller
         // Atualizacao do estabelecimento tambem fica transacionada para padronizar escritas.
         $this->transaction(fn () => $tenant->update($data));
 
-        return $tenant->fresh('saasSubscription');
+        return $tenant->fresh('saasSubscription.plan');
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\RunsDatabaseTransactions;
 use App\Http\Controllers\Controller;
+use App\Models\SaasPlan;
 use App\Models\SaasSubscription;
 use App\Models\Tenant;
 use App\Models\User;
@@ -51,7 +52,8 @@ class AuthController extends Controller
 
             SaasSubscription::create([
                 'tenant_id' => $tenant->id,
-                'plan_name' => 'Plano Fundador',
+                'saas_plan_id' => SaasPlan::where('code', 'trial')->value('id'),
+                'plan_name' => 'Trial (Premium por 30 dias)',
                 'status' => 'trial',
                 'trial_ends_at' => now()->addDays(30),
             ]);
@@ -62,7 +64,7 @@ class AuthController extends Controller
         return response()->json([
             'token' => $payload['owner']->createToken('mobile')->plainTextToken,
             'user' => $payload['owner'],
-            'tenant' => $payload['tenant']->load('saasSubscription'),
+            'tenant' => $payload['tenant']->load('saasSubscription.plan'),
         ], 201);
     }
 
@@ -84,13 +86,13 @@ class AuthController extends Controller
 
         return [
             'token' => $user->createToken('mobile')->plainTextToken,
-            'user' => $user->load('tenant.saasSubscription'),
+            'user' => $user->load('tenant.saasSubscription.plan'),
         ];
     }
 
     public function me(Request $request)
     {
-        return $request->user()->load('tenant.saasSubscription');
+        return $request->user()->load('tenant.saasSubscription.plan');
     }
 
     public function logout(Request $request)

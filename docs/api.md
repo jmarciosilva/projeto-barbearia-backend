@@ -61,6 +61,64 @@ Dados do estabelecimento do usuario logado (por `tenant_id`).
 { "name": "Novo nome", "address": "Rua X, 100", "city": "Sao Paulo", "state": "SP" }
 ```
 
+## Planos SaaS
+
+Modelo de negocio do produto (spec, secao 3): todo tenant novo comeca em
+trial de 30 dias com os limites/funcionalidades do Premium; depois disso,
+o dono escolhe um dos 3 tiers pagos. `tenant.saas_subscription` (retornado
+por `GET /tenant`, login, `GET /me` e onboarding) sempre traz:
+
+```json
+{
+  "status": "trial",
+  "effective_status": "trial",
+  "trial_days_remaining": 27,
+  "plan": { "code": "trial", "name": "Trial (Premium por 30 dias)", "price_cents": 0 },
+  "limits": { "professionals": 3, "client_subscriptions": 20, "units": 1 },
+  "usage": { "professionals": 1, "client_subscriptions": 2, "units": 1 }
+}
+```
+
+`effective_status` vira `trial_expired` (sem nada ser gravado no banco)
+assim que `trial_ends_at` passa sem o dono escolher um plano pago. A partir
+desse momento, **toda rota de escrita** (POST/PATCH/PUT/DELETE) retorna
+`402` ate o dono trocar de plano; leitura nunca e bloqueada. `PATCH
+/saas-subscription` e `POST /auth/logout` continuam liberados mesmo com o
+trial vencido, para o dono sempre ter uma saida.
+
+### `GET /saas-plans` — somente `owner`
+
+Lista os 3 tiers pagos disponiveis (trial nao aparece aqui — e automatico).
+
+```json
+[
+  { "code": "basico", "name": "Basico", "price_cents": 7999, "max_professionals": 3, "max_client_subscriptions": 100, "max_units": 1 },
+  { "code": "intermediario", "name": "Intermediario", "price_cents": 12999, "max_professionals": 8, "max_client_subscriptions": 400, "max_units": 1 },
+  { "code": "premium", "name": "Premium", "price_cents": 19999, "max_professionals": null, "max_client_subscriptions": null, "max_units": null }
+]
+```
+
+`null` num limite significa ilimitado.
+
+### `PATCH /saas-subscription` — somente `owner`
+
+```json
+{ "plan_code": "basico" }
+```
+
+Troca efetiva na hora (sem cobranca real ainda — fica para a Fase 2 com
+Asaas). Se o uso atual exceder o novo limite (ex: 6 profissionais ativos
+indo para o Basico, limite 3), a regra de downgrade (spec 3.5) entra em
+acao automaticamente: os registros mais antigos continuam ativos dentro do
+novo limite, os excedentes viram inativos (profissional com `is_active:
+false`, assinatura de cliente com `status: paused`) — nada e apagado, e o
+dono pode reativar manualmente ou fazer upgrade de novo. Retorna o tenant
+atualizado (mesmo formato de `GET /tenant`).
+
+Criar um profissional ou assinar/trocar o plano de um cliente quando o
+limite do plano SaaS ja foi atingido retorna `422` com uma mensagem
+explicando qual limite bateu.
+
 ## Auto-perfil
 
 Cada rota abaixo confere o proprio papel do usuario logado internamente (nao usa o middleware `role:...`) e so le/edita o registro vinculado a ele mesmo — nunca o de outra pessoa.

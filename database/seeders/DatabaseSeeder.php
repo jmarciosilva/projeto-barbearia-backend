@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\ClientSubscription;
 use App\Models\Payment;
 use App\Models\Professional;
+use App\Models\SaasPlan;
 use App\Models\SaasSubscription;
 use App\Models\Service;
 use App\Models\SubscriptionPlan;
@@ -45,7 +46,8 @@ class DatabaseSeeder extends Seeder
 
         SaasSubscription::create([
             'tenant_id' => $tenant->id,
-            'plan_name' => 'Plano Fundador',
+            'saas_plan_id' => SaasPlan::where('code', 'trial')->value('id'),
+            'plan_name' => 'Trial (Premium por 30 dias)',
             'status' => 'trial',
             'trial_ends_at' => now()->addDays(30),
         ]);

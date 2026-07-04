@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureTenantPlanIsActive;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Restringe rotas por papel do usuario autenticado, ex: `role:owner`.
         $middleware->alias([
             'role' => EnsureRole::class,
+            'plan.active' => EnsureTenantPlanIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

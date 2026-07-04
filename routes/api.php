@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientSubscriptionController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProfessionalController;
+use App\Http\Controllers\Api\SaasSubscriptionController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\TenantController;
@@ -25,7 +26,9 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::middleware('auth:sanctum')->group(function () {
+// `plan.active` bloqueia escrita quando o trial de 30 dias vence sem o dono
+// escolher um plano pago (spec 3.1); leitura nunca e afetada.
+Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
@@ -81,6 +84,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Gestao de catalogo, financeiro e estabelecimento e exclusiva do proprietario.
     Route::middleware('role:owner')->group(function () {
         Route::patch('/tenant', [TenantController::class, 'update']);
+        Route::get('/saas-plans', [SaasSubscriptionController::class, 'plans']);
+        Route::patch('/saas-subscription', [SaasSubscriptionController::class, 'update']);
         Route::apiResource('professionals', ProfessionalController::class)->only(['store', 'update']);
         Route::apiResource('services', ServiceController::class)->only(['store', 'update']);
         Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['store', 'update']);

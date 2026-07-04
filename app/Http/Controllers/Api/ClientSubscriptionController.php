@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\ClientSubscription;
 use App\Models\SubscriptionPlan;
+use App\Support\PlanGate;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -40,6 +41,14 @@ class ClientSubscriptionController extends Controller
         // Cliente e plano devem pertencer ao mesmo tenant para preservar isolamento de dados.
         abort_unless(Client::where('tenant_id', $tenantId)->whereKey($data['client_id'])->exists(), 422, 'Cliente invalido.');
         abort_unless(SubscriptionPlan::where('tenant_id', $tenantId)->whereKey($data['subscription_plan_id'])->exists(), 422, 'Plano invalido.');
+
+        // Limite de clientes assinantes ativos do plano SaaS (spec 3).
+        $saasPlan = PlanGate::for($tenantId)->currentPlan();
+        abort_if(
+            $saasPlan && ! PlanGate::for($tenantId)->canAddClientSubscription(),
+            422,
+            "Limite de clientes assinantes do plano {$saasPlan->name} atingido ({$saasPlan->max_client_subscriptions}). Faca upgrade para adicionar mais."
+        );
 
         $subscription = $this->transaction(fn () => ClientSubscription::create($data + [
             'tenant_id' => $tenantId,
@@ -96,6 +105,15 @@ class ClientSubscriptionController extends Controller
                 ->where('client_id', $client->id)
                 ->where('status', 'active')
                 ->update(['status' => 'canceled']);
+
+            // Verificado apos cancelar a assinatura anterior: trocar de plano nunca
+            // deve esbarrar no proprio limite por causa da assinatura que esta saindo.
+            $saasPlan = PlanGate::for($tenantId)->currentPlan();
+            abort_if(
+                $saasPlan && ! PlanGate::for($tenantId)->canAddClientSubscription(),
+                422,
+                "Limite de clientes assinantes do plano {$saasPlan->name} atingido ({$saasPlan->max_client_subscriptions}). Faca upgrade para adicionar mais."
+            );
 
             return ClientSubscription::create([
                 'tenant_id' => $tenantId,
