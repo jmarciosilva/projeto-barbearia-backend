@@ -41,21 +41,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me/client', [ClientController::class, 'me']);
     Route::get('/me/professional', [ProfessionalController::class, 'me']);
     Route::patch('/me/professional', [ProfessionalController::class, 'updateSelf']);
+    Route::post('/me/client-subscriptions', [ClientSubscriptionController::class, 'subscribeSelf']);
+    Route::post('/me/client-subscriptions/cancel', [ClientSubscriptionController::class, 'cancelSelf']);
 
     // Catalogo de leitura para montar agendamento: tambem liberado ao cliente
-    // (filtrado a itens ativos dentro do controller).
+    // (filtrado a itens ativos/proprios dentro de cada controller).
     Route::middleware('role:owner,professional,customer')->group(function () {
         Route::apiResource('professionals', ProfessionalController::class)->only(['index']);
         Route::apiResource('services', ServiceController::class)->only(['index']);
+        Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['index']);
+        Route::apiResource('appointments', AppointmentController::class)->only(['index']);
+    });
+
+    // Remarcar/cancelar tambem e permitido ao cliente, mas so no proprio agendamento
+    // e com campos restritos (checagem dentro de AppointmentController::update).
+    Route::middleware('role:owner,professional,customer')->group(function () {
+        Route::match(['put', 'patch'], '/appointments/{appointment}', [AppointmentController::class, 'update']);
     });
 
     // Operacao do dia a dia do salao: proprietario e profissional compartilham leitura
     // e as acoes de atendimento, mas nao a gestao de catalogo/financeiro.
     Route::middleware('role:owner,professional')->group(function () {
         Route::apiResource('clients', ClientController::class)->only(['index', 'store', 'update']);
-        Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['index']);
         Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['index', 'store']);
-        Route::apiResource('appointments', AppointmentController::class)->only(['index', 'update']);
         Route::post('/appointments/{appointment}/complete', [AppointmentController::class, 'complete']);
     });
 

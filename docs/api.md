@@ -99,11 +99,12 @@ Cliente ve somente profissionais com `is_active=true` (para montar agendamento);
   "phone": "11988887777",
   "specialty": "Cortes e barba",
   "commission_percentage": 40,
-  "password": "senha12345"
+  "password": "senha12345",
+  "service_ids": [1, 2]
 }
 ```
 
-Sem `password`, o profissional e criado como registro de negocio apenas (sem login).
+Sem `password`, o profissional e criado como registro de negocio apenas (sem login). `service_ids` e opcional (spec 4.1: quais servicos esse profissional executa) — precisa pertencer ao mesmo tenant, senao `422`. So aceito em `store`; `update` ainda nao sincroniza essa lista.
 
 ### `PUT/PATCH /professionals/{id}` — somente `owner`
 
@@ -152,7 +153,7 @@ Cliente ve somente servicos com `is_active=true`; `owner`/`professional` veem to
 
 ### `GET /subscription-plans` — `owner`, `professional`
 
-Inclui `services` (pivot com `included_quantity` e `discount_percentage`).
+Inclui `services` (pivot com `included_quantity` e `discount_percentage`) e `professionals` (spec 4.2: quais profissionais atendem assinantes deste plano).
 
 ### `POST /subscription-plans` / `PUT/PATCH /subscription-plans/{id}` — somente `owner`
 
@@ -167,11 +168,12 @@ Inclui `services` (pivot com `included_quantity` e `discount_percentage`).
   "services": [
     { "id": 1, "included_quantity": 4 },
     { "id": 2, "included_quantity": 4, "discount_percentage": 20 }
-  ]
+  ],
+  "professional_ids": [1, 2]
 }
 ```
 
-`allowed_weekdays` usa a convencao do Carbon: domingo=0 ... sabado=6. Omitir `usage_limit`/`allowed_weekdays`/horarios = sem restricao.
+`allowed_weekdays` usa a convencao do Carbon: domingo=0 ... sabado=6. Omitir `usage_limit`/`allowed_weekdays`/horarios = sem restricao. `professional_ids` e opcional; precisa pertencer ao mesmo tenant, senao `422`. No `update`, omitir a chave mantem a lista atual — enviar `[]` limpa a restricao (mesma semantica de `services`).
 
 ## Assinaturas de cliente
 

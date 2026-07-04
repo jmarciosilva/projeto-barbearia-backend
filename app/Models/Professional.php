@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Professional extends Model
@@ -39,5 +40,15 @@ class Professional extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class, 'professional_service')->withTimestamps();
+    }
+
+    public function subscriptionPlans(): BelongsToMany
+    {
+        return $this->belongsToMany(SubscriptionPlan::class, 'professional_subscription_plan')->withTimestamps();
     }
 }

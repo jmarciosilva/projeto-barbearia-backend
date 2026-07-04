@@ -46,4 +46,9 @@ class SubscriptionPlan extends Model
     {
         return $this->hasMany(ClientSubscription::class);
     }
+
+    public function professionals(): BelongsToMany
+    {
+        return $this->belongsToMany(Professional::class, 'professional_subscription_plan')->withTimestamps();
+    }
 }

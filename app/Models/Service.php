@@ -41,4 +41,9 @@ class Service extends Model
     {
         return $this->hasMany(Appointment::class);
     }
+
+    public function professionals(): BelongsToMany
+    {
+        return $this->belongsToMany(Professional::class, 'professional_service')->withTimestamps();
+    }
 }

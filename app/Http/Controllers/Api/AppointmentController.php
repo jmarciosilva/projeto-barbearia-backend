@@ -24,14 +24,20 @@ class AppointmentController extends Controller
     {
         $tenantId = $this->tenantId($request);
 
-        // Profissional so ve a propria agenda, nunca a de colegas; proprietario ve tudo.
+        // Profissional so ve a propria agenda, nunca a de colegas; cliente so ve os
+        // proprios agendamentos; proprietario ve tudo.
         $ownProfessionalId = $request->user()->role === 'professional'
             ? Professional::where('tenant_id', $tenantId)->where('user_id', $request->user()->id)->value('id')
+            : null;
+
+        $ownClientId = $request->user()->role === 'customer'
+            ? Client::where('tenant_id', $tenantId)->where('user_id', $request->user()->id)->value('id')
             : null;
 
         return Appointment::where('tenant_id', $tenantId)
             ->with(['client', 'professional', 'service', 'subscription.plan'])
             ->when($ownProfessionalId, fn ($query, $professionalId) => $query->where('professional_id', $professionalId))
+            ->when($ownClientId, fn ($query, $clientId) => $query->where('client_id', $clientId))
             ->when($request->query('from'), fn ($query, $from) => $query->where('starts_at', '>=', $from))
             ->when($request->query('to'), fn ($query, $to) => $query->where('starts_at', '<=', $to))
             ->orderBy('starts_at')
@@ -64,9 +70,16 @@ class AppointmentController extends Controller
         $startsAt = Carbon::parse($data['starts_at']);
         $endsAt = $startsAt->copy()->addMinutes($service->duration_minutes);
 
+        // Restricao de quem executa cada servico (spec 4.1): so se aplica quando o
+        // profissional tem alguma lista de servicos definida; sem lista, sem restricao.
+        $professionalServiceIds = $professional->services()->pluck('services.id');
+        if ($professionalServiceIds->isNotEmpty()) {
+            abort_unless($professionalServiceIds->contains($service->id), 422, 'Profissional nao realiza este servico.');
+        }
+
         // Se houver assinatura, validamos inadimplencia, vencimento, servico incluso e restricoes do plano.
         if (! empty($data['client_subscription_id'])) {
-            $this->assertSubscriptionCanBook($tenantId, $client->id, (int) $data['client_subscription_id'], $service->id, $startsAt);
+            $this->assertSubscriptionCanBook($tenantId, $client->id, (int) $data['client_subscription_id'], $service->id, $professional->id, $startsAt);
         }
 
         // Evita dois atendimentos simultaneos para o mesmo profissional.
@@ -94,6 +107,14 @@ class AppointmentController extends Controller
             'cancellation_reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        // Cliente so remarca/cancela o proprio agendamento, nunca reatribui
+        // profissional nem marca como concluido/no-show (isso e do staff).
+        if ($request->user()->role === 'customer') {
+            abort_if($appointment->client?->user_id !== $request->user()->id, 403, 'Voce so pode alterar os proprios agendamentos.');
+            abort_if(isset($data['professional_id']), 403, 'Cliente nao pode trocar o profissional do agendamento.');
+            abort_if(isset($data['status']) && $data['status'] !== 'canceled', 422, 'Cliente so pode cancelar o proprio agendamento.');
+        }
 
         if (isset($data['professional_id'])) {
             Professional::where('tenant_id', $tenantId)->findOrFail($data['professional_id']);
@@ -159,12 +180,12 @@ class AppointmentController extends Controller
             ->exists();
     }
 
-    private function assertSubscriptionCanBook(int $tenantId, int $clientId, int $subscriptionId, int $serviceId, Carbon $startsAt): void
+    private function assertSubscriptionCanBook(int $tenantId, int $clientId, int $subscriptionId, int $serviceId, int $professionalId, Carbon $startsAt): void
     {
-        // Carrega plano e servicos para validar todas as regras antes de criar agenda.
+        // Carrega plano, servicos e profissionais para validar todas as regras antes de criar agenda.
         $subscription = ClientSubscription::where('tenant_id', $tenantId)
             ->where('client_id', $clientId)
-            ->with('plan.services')
+            ->with('plan.services', 'plan.professionals')
             ->findOrFail($subscriptionId);
 
         abort_if($subscription->status !== 'active', 422, 'Assinatura nao esta ativa.');
@@ -173,6 +194,12 @@ class AppointmentController extends Controller
         abort_unless($subscription->plan->services->contains('id', $serviceId), 422, 'Servico nao incluso no plano.');
 
         $plan = $subscription->plan;
+
+        // Restricao de quem atende assinantes do plano (spec 4.2): so se aplica quando
+        // o plano tem alguma lista de profissionais definida; sem lista, sem restricao.
+        if ($plan->professionals->isNotEmpty()) {
+            abort_unless($plan->professionals->contains('id', $professionalId), 422, 'Profissional nao atende este plano.');
+        }
         if ($plan->allowed_weekdays !== null) {
             // No Carbon, domingo = 0 e sabado = 6.
             abort_unless(in_array($startsAt->dayOfWeek, $plan->allowed_weekdays, true), 422, 'Plano nao permite agendamento neste dia.');

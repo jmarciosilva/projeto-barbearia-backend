@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\RunsDatabaseTransactions;
 use App\Http\Controllers\Api\Concerns\UsesTenant;
 use App\Http\Controllers\Controller;
 use App\Models\Professional;
+use App\Models\Service;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -21,6 +22,7 @@ class ProfessionalController extends Controller
         // Cliente monta agendamento a partir desta lista; nao deve ver profissional desativado.
         return Professional::where('tenant_id', $this->tenantId($request))
             ->when($request->user()->role === 'customer', fn ($query) => $query->where('is_active', true))
+            ->with('services')
             ->orderBy('name')
             ->get();
     }
@@ -36,6 +38,8 @@ class ProfessionalController extends Controller
             'commission_percentage' => ['nullable', 'integer', 'min:0', 'max:100'],
             'is_active' => ['nullable', 'boolean'],
             'password' => ['nullable', 'string', 'min:8'],
+            'service_ids' => ['nullable', 'array'],
+            'service_ids.*' => ['integer'],
         ]);
 
         // Senha informada libera acesso ao app: exige email proprio e unico entre os logins.
@@ -45,8 +49,14 @@ class ProfessionalController extends Controller
             ]);
         }
 
+        $serviceIds = $data['service_ids'] ?? [];
+        if ($serviceIds) {
+            $found = Service::where('tenant_id', $tenantId)->whereIn('id', $serviceIds)->count();
+            abort_if($found !== count(array_unique($serviceIds)), 422, 'Um ou mais servicos nao pertencem ao estabelecimento.');
+        }
+
         // Todo profissional criado pela API fica vinculado ao tenant autenticado.
-        $professional = $this->transaction(function () use ($data, $tenantId) {
+        $professional = $this->transaction(function () use ($data, $tenantId, $serviceIds) {
             $user = null;
 
             if (! empty($data['password'])) {
@@ -60,18 +70,23 @@ class ProfessionalController extends Controller
                 ]);
             }
 
-            return Professional::create(Arr::except($data, 'password') + [
+            $professional = Professional::create(Arr::except($data, ['password', 'service_ids']) + [
                 'tenant_id' => $tenantId,
                 'user_id' => $user?->id,
             ]);
+
+            $professional->services()->sync($serviceIds);
+
+            return $professional;
         });
 
-        return response()->json($professional, 201);
+        return response()->json($professional->fresh('services'), 201);
     }
 
     public function update(Request $request, Professional $professional)
     {
-        abort_if($professional->tenant_id !== $this->tenantId($request), 404);
+        $tenantId = $this->tenantId($request);
+        abort_if($professional->tenant_id !== $tenantId, 404);
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -80,11 +95,26 @@ class ProfessionalController extends Controller
             'specialty' => ['nullable', 'string', 'max:120'],
             'commission_percentage' => ['nullable', 'integer', 'min:0', 'max:100'],
             'is_active' => ['nullable', 'boolean'],
+            'service_ids' => ['nullable', 'array'],
+            'service_ids.*' => ['integer'],
         ]);
 
-        $this->transaction(fn () => $professional->update($data));
+        if (array_key_exists('service_ids', $data)) {
+            $serviceIds = $data['service_ids'] ?? [];
+            $found = Service::where('tenant_id', $tenantId)->whereIn('id', $serviceIds)->count();
+            abort_if($found !== count(array_unique($serviceIds)), 422, 'Um ou mais servicos nao pertencem ao estabelecimento.');
+        }
 
-        return $professional;
+        $this->transaction(function () use ($professional, $data) {
+            $professional->update(Arr::except($data, ['service_ids']));
+
+            // Omitir a chave em um update nao deve apagar os servicos ja habilitados.
+            if (array_key_exists('service_ids', $data)) {
+                $professional->services()->sync($data['service_ids'] ?? []);
+            }
+        });
+
+        return $professional->fresh('services');
     }
 
     /**
