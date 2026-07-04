@@ -5,28 +5,22 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Payment extends Model
+/**
+ * Pedido de "atendimento no estabelecimento" de um cliente sem assinatura,
+ * sem profissional nem horario fixos. O staff atribui um horario disponivel
+ * (ver WaitlistController::assign) e a entrada vira um Appointment de verdade.
+ */
+class WaitlistEntry extends Model
 {
     protected $fillable = [
         'tenant_id',
         'client_id',
-        'client_subscription_id',
-        'appointment_id',
-        'amount_cents',
-        'method',
+        'service_id',
+        'professional_id',
         'status',
-        'due_on',
-        'paid_at',
         'notes',
+        'appointment_id',
     ];
-
-    protected function casts(): array
-    {
-        return [
-            'due_on' => 'date',
-            'paid_at' => 'datetime',
-        ];
-    }
 
     public function tenant(): BelongsTo
     {
@@ -38,9 +32,14 @@ class Payment extends Model
         return $this->belongsTo(Client::class);
     }
 
-    public function subscription(): BelongsTo
+    public function service(): BelongsTo
     {
-        return $this->belongsTo(ClientSubscription::class, 'client_subscription_id');
+        return $this->belongsTo(Service::class);
+    }
+
+    public function professional(): BelongsTo
+    {
+        return $this->belongsTo(Professional::class);
     }
 
     public function appointment(): BelongsTo

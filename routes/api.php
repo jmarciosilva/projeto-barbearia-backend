@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ProfessionalController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\TenantController;
+use App\Http\Controllers\Api\WaitlistController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -59,12 +60,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::match(['put', 'patch'], '/appointments/{appointment}', [AppointmentController::class, 'update']);
     });
 
+    // Fila de espera para atendimento avulso sem horario marcado: cliente entra na
+    // propria fila e pode cancelar; staff ve a fila inteira e tambem cancela.
+    Route::middleware('role:owner,professional,customer')->group(function () {
+        Route::get('/waitlist', [WaitlistController::class, 'index']);
+        Route::post('/waitlist', [WaitlistController::class, 'store']);
+        Route::patch('/waitlist/{waitlistEntry}', [WaitlistController::class, 'update']);
+    });
+
     // Operacao do dia a dia do salao: proprietario e profissional compartilham leitura
     // e as acoes de atendimento, mas nao a gestao de catalogo/financeiro.
     Route::middleware('role:owner,professional')->group(function () {
         Route::apiResource('clients', ClientController::class)->only(['index', 'store', 'update']);
         Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['index', 'store']);
         Route::post('/appointments/{appointment}/complete', [AppointmentController::class, 'complete']);
+        // Transformar uma entrada da fila em agendamento e decisao exclusiva do staff.
+        Route::post('/waitlist/{waitlistEntry}/assign', [WaitlistController::class, 'assign']);
     });
 
     // Gestao de catalogo, financeiro e estabelecimento e exclusiva do proprietario.

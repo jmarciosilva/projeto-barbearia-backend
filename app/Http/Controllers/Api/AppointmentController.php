@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\CreatesAppointments;
 use App\Http\Controllers\Api\Concerns\RunsDatabaseTransactions;
 use App\Http\Controllers\Api\Concerns\UsesTenant;
 use App\Http\Controllers\Controller;
@@ -17,6 +18,7 @@ use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
+    use CreatesAppointments;
     use RunsDatabaseTransactions;
     use UsesTenant;
 
@@ -70,12 +72,7 @@ class AppointmentController extends Controller
         $startsAt = Carbon::parse($data['starts_at']);
         $endsAt = $startsAt->copy()->addMinutes($service->duration_minutes);
 
-        // Restricao de quem executa cada servico (spec 4.1): so se aplica quando o
-        // profissional tem alguma lista de servicos definida; sem lista, sem restricao.
-        $professionalServiceIds = $professional->services()->pluck('services.id');
-        if ($professionalServiceIds->isNotEmpty()) {
-            abort_unless($professionalServiceIds->contains($service->id), 422, 'Profissional nao realiza este servico.');
-        }
+        $this->assertProfessionalCanPerformService($professional, $service);
 
         // Se houver assinatura, validamos inadimplencia, vencimento, servico incluso e restricoes do plano.
         if (! empty($data['client_subscription_id'])) {
@@ -85,14 +82,20 @@ class AppointmentController extends Controller
         // Evita dois atendimentos simultaneos para o mesmo profissional.
         abort_if($this->hasConflict($tenantId, $professional->id, $startsAt, $endsAt), 422, 'Profissional ja possui agendamento neste horario.');
 
-        $appointment = $this->transaction(fn () => Appointment::create($data + [
-            'tenant_id' => $tenantId,
-            'starts_at' => $startsAt,
-            'ends_at' => $endsAt,
-            'status' => 'scheduled',
-        ]));
+        $appointment = $this->transaction(function () use ($data, $tenantId, $startsAt, $endsAt, $service) {
+            $appointment = Appointment::create($data + [
+                'tenant_id' => $tenantId,
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                'status' => 'scheduled',
+            ]);
 
-        return response()->json($appointment->fresh(['client', 'professional', 'service', 'subscription.plan']), 201);
+            $this->createAvulsoPaymentIfNeeded($appointment, $service);
+
+            return $appointment;
+        });
+
+        return response()->json($appointment->fresh(['client', 'professional', 'service', 'subscription.plan', 'payment']), 201);
     }
 
     public function update(Request $request, Appointment $appointment)
@@ -166,18 +169,6 @@ class AppointmentController extends Controller
         });
 
         return $appointment->fresh(['client', 'professional', 'service', 'subscription.usages']);
-    }
-
-    private function hasConflict(int $tenantId, int $professionalId, Carbon $startsAt, Carbon $endsAt, ?int $ignoreId = null): bool
-    {
-        // Conflito existe quando os intervalos se sobrepoem no mesmo profissional.
-        return Appointment::where('tenant_id', $tenantId)
-            ->where('professional_id', $professionalId)
-            ->where('status', 'scheduled')
-            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
-            ->where('starts_at', '<', $endsAt)
-            ->where('ends_at', '>', $startsAt)
-            ->exists();
     }
 
     private function assertSubscriptionCanBook(int $tenantId, int $clientId, int $subscriptionId, int $serviceId, int $professionalId, Carbon $startsAt): void

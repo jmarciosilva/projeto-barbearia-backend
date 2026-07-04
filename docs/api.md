@@ -151,9 +151,9 @@ Cliente ve somente servicos com `is_active=true`; `owner`/`professional` veem to
 
 ## Planos de assinatura
 
-### `GET /subscription-plans` — `owner`, `professional`
+### `GET /subscription-plans` — `owner`, `professional`, `customer`
 
-Inclui `services` (pivot com `included_quantity` e `discount_percentage`) e `professionals` (spec 4.2: quais profissionais atendem assinantes deste plano).
+Inclui `services` (pivot com `included_quantity` e `discount_percentage`) e `professionals` (spec 4.2: quais profissionais atendem assinantes deste plano). Cliente ve somente planos com `is_active=true` (para escolher/trocar de assinatura); `owner`/`professional` veem todos.
 
 ### `POST /subscription-plans` / `PUT/PATCH /subscription-plans/{id}` — somente `owner`
 
@@ -227,9 +227,11 @@ Se o usuario logado for `customer`, o `client_id` enviado e **ignorado** e subst
 
 Conflito de horario do profissional tambem retorna `422` (`"Profissional ja possui agendamento neste horario."`), independente de haver assinatura.
 
-### `GET /appointments` — `owner`, `professional`
+**Agendamento avulso**: quando `client_subscription_id` e omitido e o servico tem `price_cents`, a API cria automaticamente um `Payment` (`status=pending`, `amount_cents` = preco do servico, vinculado ao `client_id` e ao `appointment_id`) na mesma transacao — ele aparece pronto em `GET /payments` pra confirmacao manual, igual a um pagamento de assinatura. A resposta do `POST /appointments` inclui esse pagamento em `payment` (`null` quando ha assinatura ou o servico nao tem preco).
 
-Filtros opcionais via query string: `?from=2026-07-01&to=2026-07-31` (`starts_at` entre as datas). Profissional recebe automaticamente so a propria agenda (filtrado pelo `Professional` vinculado ao login); proprietario ve a agenda inteira do estabelecimento. Nao existe listagem para `customer` — cliente ve os proprios agendamentos futuros apenas na resposta do `POST /appointments` que ele mesmo criar.
+### `GET /appointments` — `owner`, `professional`, `customer`
+
+Filtros opcionais via query string: `?from=2026-07-01&to=2026-07-31` (`starts_at` entre as datas). Profissional recebe automaticamente so a propria agenda; cliente recebe automaticamente so os proprios agendamentos (filtrado pelo `Client` vinculado ao login); proprietario ve a agenda inteira do estabelecimento.
 
 ### `PUT/PATCH /appointments/{id}` — `owner`, `professional`
 
@@ -255,6 +257,36 @@ Profissional so conclui os proprios atendimentos (`403` caso contrario); proprie
 ```
 
 `method`: `pix` | `cash` | `card` | `other` (default `pix`). Quando `status=paid` (na criacao ou via `mark-paid`), a assinatura vinculada e atualizada automaticamente (`payment_status=paid`, `last_payment_at`).
+
+Pagamento avulso (sem assinatura) usa `client_id` e/ou `appointment_id` no lugar de `client_subscription_id` — pelo menos um dos tres e obrigatorio, senao `422`. Na pratica, o pagamento avulso normalmente **nem precisa ser criado manualmente**: `POST /appointments` ja cria um automaticamente quando o agendamento nao tem assinatura (ver secao Agenda). `GET /payments` retorna `client`, `appointment.service` e `subscription.client` carregados, cobrindo os dois tipos de pagamento na mesma tela.
+
+## Fila de espera
+
+Pedido de "atendimento no estabelecimento" de um cliente sem assinatura, sem escolher profissional nem horario — o staff atribui manualmente quando surge uma vaga.
+
+### `GET /waitlist` — `owner`, `professional`, `customer`
+
+Cliente ve somente as propias entradas; `owner`/`professional` veem a fila inteira do estabelecimento. Filtro opcional `?status=waiting`. Inclui `client`, `service`, `professional` (preferencia, pode ser `null`) e `appointment` (preenchido apos `assign`).
+
+### `POST /waitlist` — `owner`, `professional`, `customer`
+
+```json
+{ "service_id": 1, "professional_id": null, "notes": "Prefere de tarde" }
+```
+
+Cliente logado sempre entra na propria fila (`client_id` enviado e ignorado, igual ao `POST /appointments`). `owner`/`professional` podem cadastrar um cliente existente (`client_id` obrigatorio nesse caso, para atender um walk-in). `professional_id` e opcional — `null` significa "qualquer profissional"; quando informado, precisa poder realizar o `service_id` (spec 4.1). Toda entrada nasce com `status=waiting`.
+
+### `PATCH /waitlist/{id}` — `owner`, `professional`, `customer`
+
+Unico uso hoje e cancelar: `{ "status": "canceled" }`. Cliente so cancela a propria entrada (`403` senao); staff cancela qualquer uma. So funciona enquanto `status=waiting` (`422` caso contrario).
+
+### `POST /waitlist/{id}/assign` — somente `owner`, `professional`
+
+```json
+{ "professional_id": 2, "starts_at": "2026-07-06 10:00:00" }
+```
+
+Transforma a entrada num `Appointment` de verdade (sempre avulso, sem `client_subscription_id`), reaproveitando as mesmas checagens de `POST /appointments`: `professional_id` precisa poder realizar o servico (spec 4.1) e nao pode haver conflito de horario (`422` em ambos os casos). `professional_id` no corpo e opcional se a entrada ja tiver uma preferencia salva (usa a preferencia nesse caso); senao e obrigatorio. Cria o pagamento avulso automaticamente (mesma regra do agendamento direto) e marca a entrada como `status=scheduled`, com `appointment_id` preenchido. So funciona em entradas `waiting` (`422` se ja atendida/cancelada).
 
 ## Formato de erro padrao
 
