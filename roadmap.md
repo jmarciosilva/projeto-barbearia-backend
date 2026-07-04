@@ -21,7 +21,7 @@ Fonte da verdade de produto: `../mobile/clube-do-salao-especificacao-produto.md`
 
 ## Fase 0 - Fundacao e Validacao
 
-Status: `Em andamento`
+Status: `Em auditoria`
 
 Objetivo: validar o modelo de assinatura com estabelecimentos reais, usando controle manual de cobranca e foco no nucleo de recorrencia.
 
@@ -53,8 +53,8 @@ Objetivo: validar o modelo de assinatura com estabelecimentos reais, usando cont
 - [x] Leitura de catalogo (servicos/profissionais) liberada para cliente, filtrada a itens ativos
 - [x] Endpoints de auto-perfil (`GET /me/client`, `GET /me/professional`, `PATCH /me/professional`) com autoedicao restrita — profissional nao altera a propria comissao
 - [x] Agenda (`GET /appointments`) auto-escopada por profissional
-- [ ] Servicos habilitados por profissional (spec 4.1: pivot profissional/servico, ainda nao modelado)
-- [ ] Profissionais habilitados por plano (spec 4.2: restricao de plano, ainda nao modelada)
+- [x] Servicos habilitados por profissional (spec 4.1: pivot profissional/servico)
+- [x] Profissionais habilitados por plano (spec 4.2: restricao de plano)
 
 ### Criterios de aceite
 
@@ -74,36 +74,38 @@ Objetivo: validar o modelo de assinatura com estabelecimentos reais, usando cont
 | 2026-07-03 | Codex | Parcial aprovado | Comentarios em PT-BR, handler global de excecoes, transacoes explicitas e testes de rollback/JSON | Ainda faltam policies por papel e testes de regras negativas especificas |
 | 2026-07-03 | Claude | Parcial aprovado | Middleware `role` por papel (owner/professional/customer) aplicado nas rotas; login opcional para profissional e cliente (gap que bloqueava o Flutter); seeds de demonstracao com os 3 papeis e dados espelhando os mocks do app; 10 novos testes cobrindo inadimplencia, limite de uso, restricao de dia/horario e autorizacao por papel (15/15 passando); `docs/api.md` com contrato de payloads | Falta validacao com estabelecimento piloto real; integracao ainda nao foi feita no lado Flutter (app mobile continua mockado) |
 | 2026-07-03 | Claude | Parcial aprovado | Liberada leitura de servicos/profissionais para `customer` (filtrada a ativos); novos endpoints de auto-perfil `GET/PATCH /me/professional` e `GET /me/client` (cada um checando o proprio papel internamente, sem depender do middleware `role`); `GET /appointments` passou a auto-escopar pelo profissional logado; `PhaseZeroSelfServiceTest.php` (5 testes novos, 20/20 no total) cobre leitura de catalogo por cliente, isolamento de `/me/*` por papel e escopo de agenda; `docs/api.md` atualizado; validado ponta a ponta contra o app Flutter real | Servicos habilitados por profissional e profissionais habilitados por plano continuam sem modelagem; validacao com estabelecimento piloto real ainda pendente |
+| 2026-07-04 | Codex | Em auditoria | Rechecagem confirmou implementacao real de servicos por profissional, profissionais por plano, agendamento avulso e fila de espera; `php artisan test` passou com 48/48 testes; `php artisan route:list --path=api` listou 41 rotas esperadas | Validacao com estabelecimento piloto real segue pendente; roadmap historico preserva linhas antigas como contexto |
 
 ## Fase 1 - Planos SaaS e Controle de Acesso
 
-Status: `Nao iniciado`
+Status: `Em auditoria`
 
 Objetivo: construir a infraestrutura de planos SaaS descrita na especificacao (secao 3) — trial de 30 dias e os 3 tiers pagos (Basico/Intermediario/Premium), com limites e liberacao de funcionalidade por plano. Hoje so existe uma tabela `saas_subscriptions` esqueleto (`plan_name` fixo "Plano Fundador", sem tiers nem limites), entao nenhuma acao no sistema e realmente restrita por plano.
 
 ### Escopo previsto
 
-- [ ] Schema `plan_features`/limites por tier (profissionais, clientes assinantes ativos, unidades)
-- [ ] Modelagem dos 4 tiers (Trial, Basico R$79,99, Intermediario R$129,99, Premium R$199,99) com preco e limites
-- [ ] `PlanGate` centralizado (service/middleware) checando feature/limite antes de acoes restritas (cadastro de profissional, servico, unidade etc.)
-- [ ] `POST /auth/register-owner` passa a criar o tenant ja em trial de 30 dias, sem cartao
-- [ ] Endpoint de upgrade/downgrade de plano SaaS
-- [ ] Regra de downgrade (spec 3.5): registros excedentes ficam `is_active=false`, nunca sao removidos
-- [ ] Suporte a multiplas unidades/filiais por tenant (exclusivo do tier Premium)
-- [ ] Job de checagem de expiracao de trial
+- [x] Schema de limites por tier (profissionais, clientes assinantes ativos, unidades) via `saas_plans`
+- [x] Modelagem dos 4 tiers (Trial, Basico R$79,99, Intermediario R$129,99, Premium R$199,99) com preco e limites
+- [x] `PlanGate` centralizado checando limite antes de acoes restritas
+- [x] `POST /auth/register-owner` passa a criar o tenant ja em trial de 30 dias, sem cartao
+- [x] Endpoint de upgrade/downgrade de plano SaaS
+- [x] Regra de downgrade (spec 3.5): registros excedentes ficam inativos, nunca sao removidos
+- [ ] Suporte a multiplas unidades/filiais por tenant (exclusivo do tier Premium) — nesta fase so existe `tenants.units_count`, sem CRUD operacional de unidades
+- [x] Checagem de expiracao de trial calculada em leitura/escrita, sem job agendado nesta fase
 
 ### Criterios de aceite
 
-- [ ] Tenant criado via `/auth/register-owner` nasce em trial com `trial_ends_at` em +30 dias
-- [ ] Acao bloqueada por `PlanGate` retorna erro especifico (nao um 403 generico)
-- [ ] Downgrade testado nao remove registros excedentes, so inativa
-- [ ] Testes automatizados cobrindo limite por tier e downgrade
+- [x] Tenant criado via `/auth/register-owner` nasce em trial com `trial_ends_at` em +30 dias
+- [x] Acao bloqueada por `PlanGate` retorna erro especifico (nao um 403 generico)
+- [x] Downgrade testado nao remove registros excedentes, so inativa
+- [x] Testes automatizados cobrindo limite por tier e downgrade
 
 ### Auditoria da fase
 
 | Data | Responsavel | Resultado | Evidencias | Pendencias |
 |---|---|---|---|---|
 | 2026-07-03 | Claude | Nao iniciado | Auditoria da especificacao vs. roadmap encontrou a lacuna: so existe `app/Models/SaasSubscription.php` com `plan_name` fixo, sem os 4 tiers nem tabela de limites | Toda a fase — schema `plan_features`, `PlanGate`, trial automatico, upgrade/downgrade |
+| 2026-07-04 | Codex | Em auditoria | Rechecagem encontrou `saas_plans`, vinculo `saas_subscriptions.saas_plan_id`, `PlanGate`, rotas `GET /saas-plans` e `PATCH /saas-subscription`, bloqueio 402 para trial vencido e testes dedicados em `PhaseUmSaasPlansTest`; `php artisan test` passou com 48/48 testes | Multi-unidade ainda e limite numerico, sem CRUD; cobranca real via Asaas permanece para a Fase 2 |
 
 ## Fase 2 - Cobranca Automatica e Base Operacional
 

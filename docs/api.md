@@ -1,4 +1,4 @@
-# API do Clube do Salao — Fase 0
+# API do Clube do Salao — Fases 0 e 1
 
 Contrato de payloads da API para a integracao do app Flutter (`D:\PROJETO_BARBEARIA\mobile`). Base URL local: `http://localhost:8000/api` (ou a porta usada por `php artisan serve`).
 
@@ -162,7 +162,7 @@ Cliente ve somente profissionais com `is_active=true` (para montar agendamento);
 }
 ```
 
-Sem `password`, o profissional e criado como registro de negocio apenas (sem login). `service_ids` e opcional (spec 4.1: quais servicos esse profissional executa) — precisa pertencer ao mesmo tenant, senao `422`. So aceito em `store`; `update` ainda nao sincroniza essa lista.
+Sem `password`, o profissional e criado como registro de negocio apenas (sem login). `service_ids` e opcional (spec 4.1: quais servicos esse profissional executa) — precisa pertencer ao mesmo tenant, senao `422`. Tambem pode ser enviado em `update`; omitir a chave mantem a lista atual, enviar `[]` limpa os servicos habilitados.
 
 ### `PUT/PATCH /professionals/{id}` — somente `owner`
 
@@ -291,9 +291,9 @@ Conflito de horario do profissional tambem retorna `422` (`"Profissional ja poss
 
 Filtros opcionais via query string: `?from=2026-07-01&to=2026-07-31` (`starts_at` entre as datas). Profissional recebe automaticamente so a propria agenda; cliente recebe automaticamente so os proprios agendamentos (filtrado pelo `Client` vinculado ao login); proprietario ve a agenda inteira do estabelecimento.
 
-### `PUT/PATCH /appointments/{id}` — `owner`, `professional`
+### `PUT/PATCH /appointments/{id}` — `owner`, `professional`, `customer`
 
-Remarcar (`starts_at`/`professional_id`) refaz a checagem de conflito. Tambem aceita `status` (`scheduled`|`canceled`|`completed`|`no_show`) e `cancellation_reason`.
+Remarcar (`starts_at`/`professional_id`) refaz a checagem de conflito. `owner`/`professional` tambem podem enviar `status` (`scheduled`|`canceled`|`completed`|`no_show`) e `cancellation_reason`. Cliente so altera o proprio agendamento e tem campos restritos pelo controller.
 
 ### `POST /appointments/{id}/complete` — `owner`, `professional`
 
