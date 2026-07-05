@@ -4,7 +4,7 @@ Contrato de payloads da API para a integracao do app Flutter (`D:\PROJETO_BARBEA
 
 ## Autenticacao
 
-Sanctum com token em `Authorization: Bearer {token}`. Todo endpoint autenticado exige esse header, exceto `/auth/register-owner`, `/auth/login` e `/health`.
+Sanctum com token em `Authorization: Bearer {token}`. Todo endpoint autenticado exige esse header, exceto `/auth/register-owner`, `/auth/register-client`, `/auth/login`, `/tenants/by-invite-code/{code}`, `/tenants/directory` e `/health`.
 
 Papeis (`role`): `owner`, `professional`, `customer`. Cada rota abaixo indica quais papeis tem acesso.
 
@@ -24,6 +24,40 @@ Cria o tenant (estabelecimento), o usuario proprietario e a assinatura SaaS tria
 // Resposta 201
 { "token": "1|abc...", "user": { "id": 1, "role": "owner", "tenant_id": 1, ... }, "tenant": { "id": 1, "name": "...", "saas_subscription": { ... } } }
 ```
+
+### `POST /auth/register-client` — publico
+
+Autocadastro do cliente (Fase 3 — Onboarding e Autocadastro): cria o `User` (role `customer`) e o `Client`, ja vinculados ao tenant certo, e retorna token. O cliente chega ao tenant de duas formas — informe **uma** delas:
+
+- `invite_code`: codigo de convite do estabelecimento (o dono compartilha por link/QR — ver `GET /tenants/by-invite-code/{code}`).
+- `tenant_id`: id de um estabelecimento escolhido no diretorio publico (`GET /tenants/directory`), quando o cliente nao recebeu convite de ninguem.
+
+```json
+// Requisicao (via convite)
+{
+  "invite_code": "AB3XQ9",
+  "client": { "name": "Maria Cliente", "email": "maria@example.com", "phone": "11988887777", "password": "senha12345" }
+}
+```
+
+```json
+// Resposta 201
+{ "token": "3|ghi...", "user": { "id": 5, "role": "customer", "tenant_id": 1 }, "client": { "id": 3, "name": "Maria Cliente" }, "tenant": { "id": 1, "name": "Clube do Salao", "business_type": "barbershop", "city": "Sao Paulo" } }
+```
+
+Cadastro entra ativo na hora, sem aprovacao manual do dono — a confirmacao de pagamento continua sendo feita separadamente, como ja funciona hoje. `422` quando nenhum dos dois campos de vinculo e informado, quando o codigo/id nao corresponde a um estabelecimento, ou quando o telefone ja esta em uso nesse mesmo tenant.
+
+### `GET /tenants/by-invite-code/{code}` — publico
+
+Usado pela tela de confirmacao do convite antes do cliente preencher o proprio cadastro. Retorna so `id`, `name`, `business_type` e `city`. `404` quando o codigo nao existe.
+
+### `GET /tenants/directory` — publico
+
+Lista todos os estabelecimentos (mesmos 4 campos de `by-invite-code`), ordenados por nome, para o cliente sem convite escolher onde se cadastrar.
+
+### `POST /tenant/invite-code/regenerate` — somente `owner`
+
+Troca o `invite_code` do proprio tenant, invalidando o anterior (quem tiver o link/QR antigo nao consegue mais se cadastrar por ele). Retorna o tenant atualizado.
 
 ### `POST /auth/login` — publico
 
@@ -62,6 +96,8 @@ Dados do estabelecimento do usuario logado (por `tenant_id`).
 ```
 
 `professional_payment_day` define o dia do mes usado no extrato de comissao dos profissionais.
+
+`invite_code` (tambem presente na resposta) e o codigo que o dono compartilha com o cliente para autocadastro (ver `POST /auth/register-client`); é gerado sozinho na criacao do tenant e so muda via `POST /tenant/invite-code/regenerate`.
 
 ## Planos SaaS
 

@@ -142,7 +142,45 @@ Objetivo: profissionalizar a cobranca manual da primeira versao: o dono confirma
 | 2026-07-04 | Codex | Em andamento | Escopo corrigido a pedido do usuario: primeira versao nao integra gateway; pagamento e manual pelo dono. Backend passa a exigir modalidade em `POST /payments/{id}/mark-paid`, aceitando `pix`, `credit_card`, `debit_card`, `cash` e `fiado`; `fiado` registra a modalidade mas mantem `status=pending` e nao preenche `paid_at` | Falta cobrir todas as modalidades em testes e criar visao operacional dedicada para fiados |
 | 2026-07-04 | Codex | Parcial aprovado | Fiado ganhou recebimentos parciais em `payment_receipts` e endpoint `POST /payments/{id}/receipts`; cliente ganhou `GET /me/payments`; profissional ganhou extrato `GET /me/professional/finance`; dono ganhou consulta de extrato por profissional, lancamento de adiantamento e configuracao de `professional_payment_day`; `php artisan test` passou com 52/52 testes | Falta notificacao push FCM e validacao em dispositivo real |
 
-## Fase 3 - Fidelidade e Avaliacoes
+## Fase 3 - Onboarding e Autocadastro
+
+Status: `Em andamento`
+
+Objetivo: permitir que o cliente se cadastre sozinho no app, vinculado a um estabelecimento por convite (codigo/link/QR) ou por escolha em um diretorio publico de estabelecimentos ativos, sem depender do dono cadastra-lo manualmente via `POST /clients`. Hoje nao existe nenhuma rota publica de autocadastro de cliente nem qualquer mecanismo de convite/token/QR no backend.
+
+### Escopo previsto
+
+- [x] Campo `invite_code` unico e regeneravel em `tenants` (codigo curto alfanumerico), gerado automaticamente em `POST /auth/register-owner`
+- [x] Endpoint publico `GET /tenants/by-invite-code/{code}` retornando dados minimos do salao (nome, tipo de negocio, cidade) para a tela de confirmacao do convite
+- [x] Endpoint publico `GET /tenants/directory` listando estabelecimentos ativos (nome, cidade, tipo de negocio) para o cliente avulso escolher sem convite
+- [x] Endpoint publico `POST /auth/register-client` (sem autenticacao previa), recebendo `invite_code` OU `tenant_id` (do diretorio) + dados do cliente (nome, telefone, e-mail, senha), criando `Client` + `User(role:customer)` ja ativos e autenticados na mesma resposta (mesmo padrao transacional do `register-owner`)
+- [x] Endpoint para o dono regenerar o `invite_code` do proprio tenant, invalidando o anterior
+- [x] Testes cobrindo: cadastro via codigo de convite valido, codigo invalido, cadastro via diretorio, duplicidade de telefone por tenant, e isolamento do diretorio (sem vazar dado financeiro/sensivel do estabelecimento)
+- [ ] Telas do app mobile (escolha de perfil, deep link/QR, diretorio, cadastro do cliente, compartilhar/regenerar convite, checklist do dono) — proxima etapa
+
+### Criterios de aceite
+
+- [x] Cliente consegue se autocadastrar informando um codigo de convite valido, sem login previo
+- [x] Cliente consegue se autocadastrar escolhendo um salao no diretorio publico
+- [x] Cadastro via convite/diretorio ja entra ativo, sem aprovacao manual do dono
+- [x] Diretorio publico nao expoe dado financeiro/sensivel do estabelecimento
+- [x] Dono consegue regenerar o codigo de convite do proprio salao
+
+### Auditoria da fase
+
+| Data | Responsavel | Resultado | Evidencias | Pendencias |
+|---|---|---|---|---|
+| 2026-07-05 | Claude | Parcial aprovado | Migration adiciona `invite_code` a `tenants` (unico, 6 caracteres sem 0/O/1/I/L para evitar confusao em tela pequena/impresso) com backfill dos tenants ja existentes; `Tenant::booted()` gera o codigo sozinho em qualquer criacao (`register-owner` nao precisou mudar); `TenantController` ganhou `byInviteCode`, `directory` (ambos publicos, so `id/name/business_type/city`) e `regenerateInviteCode` (exclusivo do dono); `AuthController::registerClient` (publico) aceita `invite_code` OU `tenant_id`, valida telefone unico por tenant (mesma regra do `ClientController::store`) e cria `User(customer)` + `Client` numa transacao, retornando token pronto pro app logar direto — mesmo padrao do `register-owner`. 7 testes novos em `PhaseTresOnboardingTest` (59/59 testes de backend passando); `docs/api.md` atualizado. Validado ponta a ponta contra a API real (nao mockada) rodando em `php artisan serve`: diretorio publico listou os 4 tenants existentes com `invite_code` ja preenchido pelo backfill; consulta por codigo de convite (inclusive em minusculo) resolveu o tenant certo; cliente se autocadastrou via convite, recebeu token, e o token funcionou em `GET /me/client`; dono logado regenerou o proprio codigo e o codigo antigo passou a retornar 404 enquanto o novo funcionou | Mobile (todas as telas) ainda nao existe — proxima etapa desta fase |
+
+### Decisoes
+
+| Data | Decisao | Motivo |
+|---|---|---|
+| 2026-07-05 | Convite do dono ao cliente usa codigo fixo regeneravel, nao um token unico por convite | Simplicidade para dono leigo em tecnologia: reutiliza o mesmo codigo/QR sem precisar gerar um novo a cada pessoa convidada; confirmado com o usuario |
+| 2026-07-05 | Cliente avulso sem convite escolhe o salao em um diretorio publico (nome, cidade, tipo de negocio) | Reduz friccao de cadastro para quem nao recebeu convite de ninguem; aceito o tradeoff de expor a existencia de estabelecimentos concorrentes entre si na mesma cidade |
+| 2026-07-05 | Cadastro de cliente via convite/diretorio entra ativo direto, sem aprovacao manual do dono | Confirmacao de pagamento ja e manual e feita separadamente pelo dono; bloquear o cadastro em si adicionaria friccao sem reduzir risco financeiro real |
+
+## Fase 4 - Fidelidade e Avaliacoes
 
 Status: `Nao iniciado`
 
@@ -153,7 +191,7 @@ Status: `Nao iniciado`
 - [ ] Niveis Bronze, Silver, Gold e Black
 - [ ] Extrato de pontos
 
-## Fase 4 - CRM Avancado e Estoque
+## Fase 5 - CRM Avancado e Estoque
 
 Status: `Nao iniciado`
 
@@ -165,7 +203,7 @@ Status: `Nao iniciado`
 - [ ] Produtos e estoque
 - [ ] Vendas de produtos
 
-## Fase 5 - Marketing Automation
+## Fase 6 - Marketing Automation
 
 Status: `Nao iniciado`
 
@@ -176,7 +214,7 @@ Status: `Nao iniciado`
 - [ ] Recuperacao de cancelamento
 - [ ] Cupons e indicacoes
 
-## Fase 6 - Business Intelligence
+## Fase 7 - Business Intelligence
 
 Status: `Nao iniciado`
 
@@ -189,7 +227,7 @@ Status: `Nao iniciado`
 - [ ] Ocupacao de agenda
 - [ ] Ranking de profissionais
 
-## Fase 7 - Inteligencia Artificial
+## Fase 8 - Inteligencia Artificial
 
 Status: `Nao iniciado`
 
@@ -209,3 +247,4 @@ Status: `Nao iniciado`
 | 2026-07-03 | Remover a fase "Portal Web Administrativo"; mover "Multi-unidade" para a nova Fase 1 | A especificacao (secoes 1 e 6) define "zero painel web administrativo" como decisao de produto permanente, nao como item so fora do lancamento inicial — "Relatorios avancados" ja e coberto pela Fase 6 (Business Intelligence); "Multi-unidade" e recurso do tier Premium do SaaS, nao depende de painel web | Fase 7 (Inteligencia Artificial) mantem o mesmo numero; nenhuma outra fase referenciava o Portal Web |
 | 2026-07-03 | Inserir a Fase 1 "Planos SaaS e Controle de Acesso" | Trial + 3 tiers pagos + `PlanGate` (secao 3 da especificacao) e o nucleo do modelo de negocio e nao tinha nenhuma fase no roadmap | Fases antigas 1-5 foram renumeradas para 2-6; Fase 7 nao muda |
 | 2026-07-03 | Adicionar disparo de notificacao push (FCM) na Fase 2 | Item nunca tinha sido listado no roadmap do backend, apesar de a especificacao inclui-lo ja no tier Basico (3.2/4.3); mesma decisao tomada no roadmap do mobile — push so faz sentido completo junto com o resto da cobranca/lembrete, nao na fundacao | Fase 2 passa a cobrir lembretes ligados a cobranca manual e agendamentos |
+| 2026-07-05 | Inserir a Fase 3 "Onboarding e Autocadastro", a pedido do usuario apos revisao de usabilidade | Hoje o cliente so entra no sistema se o dono cadastrar manualmente via `POST /clients`, e nao existe nenhum mecanismo de convite/token/QR nem rota publica de autocadastro — isso nao atende a expectativa de cliente se autocadastrar via convite/link/QR ou de forma avulsa escolhendo o salao | Fases antigas 3-7 (Fidelidade, CRM, Marketing, BI, IA) foram renumeradas para 4-8 |

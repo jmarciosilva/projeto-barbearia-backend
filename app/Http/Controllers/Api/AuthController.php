@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\RunsDatabaseTransactions;
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\SaasPlan;
 use App\Models\SaasSubscription;
 use App\Models\Tenant;
@@ -65,6 +66,69 @@ class AuthController extends Controller
             'token' => $payload['owner']->createToken('mobile')->plainTextToken,
             'user' => $payload['owner'],
             'tenant' => $payload['tenant']->load('saasSubscription.plan'),
+        ], 201);
+    }
+
+    /**
+     * Autocadastro do cliente (spec: onboarding e autocadastro), sem
+     * depender do dono cadastrar manualmente via `POST /clients`. O cliente
+     * chega a um tenant por convite (`invite_code`, vindo de link/QR do
+     * dono) ou por escolha no diretorio publico (`tenant_id`).
+     */
+    public function registerClient(Request $request)
+    {
+        $data = $request->validate([
+            'invite_code' => ['nullable', 'string'],
+            'tenant_id' => ['nullable', 'integer', 'exists:tenants,id'],
+            'client.name' => ['required', 'string', 'max:255'],
+            'client.email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'client.phone' => ['required', 'string', 'max:30'],
+            'client.password' => ['required', 'string', 'min:8'],
+        ]);
+
+        abort_if(
+            empty($data['invite_code']) && empty($data['tenant_id']),
+            422,
+            'Informe um codigo de convite ou escolha um estabelecimento.'
+        );
+
+        $tenant = ! empty($data['invite_code'])
+            ? Tenant::where('invite_code', strtoupper($data['invite_code']))->first()
+            : Tenant::find($data['tenant_id']);
+
+        abort_if(! $tenant, 422, 'Estabelecimento nao encontrado para o codigo/id informado.');
+
+        // Telefone e unico por estabelecimento, mesma regra do cadastro manual (ClientController::store).
+        $request->validate([
+            'client.phone' => [Rule::unique('clients', 'phone')->where('tenant_id', $tenant->id)],
+        ]);
+
+        $payload = $this->transaction(function () use ($data, $tenant) {
+            $user = User::create([
+                'tenant_id' => $tenant->id,
+                'name' => $data['client']['name'],
+                'email' => $data['client']['email'],
+                'phone' => $data['client']['phone'],
+                'role' => 'customer',
+                'password' => $data['client']['password'],
+            ]);
+
+            $client = Client::create([
+                'tenant_id' => $tenant->id,
+                'user_id' => $user->id,
+                'name' => $data['client']['name'],
+                'email' => $data['client']['email'],
+                'phone' => $data['client']['phone'],
+            ]);
+
+            return compact('tenant', 'user', 'client');
+        });
+
+        return response()->json([
+            'token' => $payload['user']->createToken('mobile')->plainTextToken,
+            'user' => $payload['user'],
+            'client' => $payload['client'],
+            'tenant' => $payload['tenant']->only(['id', 'name', 'business_type', 'city']),
         ], 201);
     }
 

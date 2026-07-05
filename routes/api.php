@@ -21,7 +21,13 @@ Route::get('/health', fn () => [
 ]);
 
 Route::post('/auth/register-owner', [AuthController::class, 'registerOwner']);
+Route::post('/auth/register-client', [AuthController::class, 'registerClient']);
 Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Onboarding e autocadastro (Fase 3): descoberta publica de estabelecimento
+// antes do cliente ter qualquer token, seja por convite ou por diretorio.
+Route::get('/tenants/by-invite-code/{code}', [TenantController::class, 'byInviteCode']);
+Route::get('/tenants/directory', [TenantController::class, 'directory']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -87,6 +93,7 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     // Gestao de catalogo, financeiro e estabelecimento e exclusiva do proprietario.
     Route::middleware('role:owner')->group(function () {
         Route::patch('/tenant', [TenantController::class, 'update']);
+        Route::post('/tenant/invite-code/regenerate', [TenantController::class, 'regenerateInviteCode']);
         Route::get('/saas-plans', [SaasSubscriptionController::class, 'plans']);
         Route::patch('/saas-subscription', [SaasSubscriptionController::class, 'update']);
         Route::apiResource('professionals', ProfessionalController::class)->only(['store', 'update']);

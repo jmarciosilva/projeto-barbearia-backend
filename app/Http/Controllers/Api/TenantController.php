@@ -31,6 +31,7 @@ class TenantController extends Controller
             'city' => ['nullable', 'string', 'max:120'],
             'state' => ['nullable', 'string', 'size:2'],
             'timezone' => ['nullable', 'string', 'max:80'],
+            'professional_payment_day' => ['nullable', 'integer', 'min:1', 'max:31'],
         ]);
 
         $tenant = Tenant::findOrFail($this->tenantId($request));
@@ -39,5 +40,46 @@ class TenantController extends Controller
         $this->transaction(fn () => $tenant->update($data));
 
         return $tenant->fresh('saasSubscription.plan');
+    }
+
+    /**
+     * Regenera o codigo de convite do proprio estabelecimento, invalidando o
+     * anterior. Exclusivo do dono (rota protegida por `role:owner`).
+     */
+    public function regenerateInviteCode(Request $request)
+    {
+        $tenant = Tenant::findOrFail($this->tenantId($request));
+
+        $this->transaction(fn () => $tenant->update(['invite_code' => Tenant::generateInviteCode()]));
+
+        return $tenant->fresh('saasSubscription.plan');
+    }
+
+    /**
+     * Consulta publica (sem autenticacao) usada pela tela de confirmacao do
+     * convite: so expoe o minimo necessario para o cliente reconhecer o
+     * salao antes de completar o proprio cadastro.
+     */
+    public function byInviteCode(string $code)
+    {
+        $tenant = Tenant::select(['id', 'name', 'business_type', 'city'])
+            ->where('invite_code', strtoupper($code))
+            ->first();
+
+        abort_if(! $tenant, 404, 'Codigo de convite invalido.');
+
+        return $tenant;
+    }
+
+    /**
+     * Diretorio publico (sem autenticacao) para o cliente avulso, sem
+     * convite de ninguem, escolher o salao onde quer se cadastrar. So expoe
+     * dado publico/nao sensivel de cada estabelecimento.
+     */
+    public function directory()
+    {
+        return Tenant::select(['id', 'name', 'business_type', 'city'])
+            ->orderBy('name')
+            ->get();
     }
 }

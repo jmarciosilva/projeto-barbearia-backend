@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
 class Tenant extends Model
 {
@@ -19,8 +20,34 @@ class Tenant extends Model
         'state',
         'timezone',
         'status',
+        'invite_code',
         'units_count',
+        'professional_payment_day',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Tenant $tenant) {
+            if (empty($tenant->invite_code)) {
+                $tenant->invite_code = static::generateInviteCode();
+            }
+        });
+    }
+
+    /**
+     * Codigo curto (sem 0/O/1/I/L, que se confundem entre si em telas
+     * pequenas ou impressos) que o dono compartilha com o cliente por
+     * link/QR para o cliente se autocadastrar ja vinculado a este tenant.
+     */
+    public static function generateInviteCode(): string
+    {
+        do {
+            $code = Str::upper(Str::random(6));
+            $code = str_replace(['0', 'O', '1', 'I', 'L'], ['2', 'P', '3', 'J', 'K'], $code);
+        } while (static::where('invite_code', $code)->exists());
+
+        return $code;
+    }
 
     public function users(): HasMany
     {
@@ -55,6 +82,11 @@ class Tenant extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    public function professionalAdvances(): HasMany
+    {
+        return $this->hasMany(ProfessionalAdvance::class);
     }
 
     public function saasSubscription(): HasOne
