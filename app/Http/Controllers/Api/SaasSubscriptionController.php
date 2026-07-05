@@ -28,7 +28,7 @@ class SaasSubscriptionController extends Controller
 
     /**
      * Proprietario seleciona/troca de tier pago. Efetiva na hora (sem
-     * cobranca real ainda — Asaas fica pra Fase 2); aplica a regra de
+     * cobranca real ainda — gateway fica para fase futura); aplica a regra de
      * downgrade (spec 3.5) quando o uso atual excede o novo limite.
      */
     public function update(Request $request)

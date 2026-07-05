@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientSubscriptionController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ProfessionalFinanceController;
 use App\Http\Controllers\Api\ProfessionalController;
 use App\Http\Controllers\Api\SaasSubscriptionController;
 use App\Http\Controllers\Api\ServiceController;
@@ -44,9 +45,11 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     // ja usado em AppointmentController::complete).
     Route::get('/me/client', [ClientController::class, 'me']);
     Route::get('/me/professional', [ProfessionalController::class, 'me']);
+    Route::get('/me/professional/finance', [ProfessionalFinanceController::class, 'me']);
     Route::patch('/me/professional', [ProfessionalController::class, 'updateSelf']);
     Route::post('/me/client-subscriptions', [ClientSubscriptionController::class, 'subscribeSelf']);
     Route::post('/me/client-subscriptions/cancel', [ClientSubscriptionController::class, 'cancelSelf']);
+    Route::get('/me/payments', [PaymentController::class, 'me']);
 
     // Catalogo de leitura para montar agendamento: tambem liberado ao cliente
     // (filtrado a itens ativos/proprios dentro de cada controller).
@@ -92,5 +95,9 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['update']);
         Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
         Route::post('/payments/{payment}/mark-paid', [PaymentController::class, 'markPaid']);
+        Route::post('/payments/{payment}/receipts', [PaymentController::class, 'receive']);
+        Route::get('/professionals/{professional}/finance', [ProfessionalFinanceController::class, 'show']);
+        Route::get('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'advances']);
+        Route::post('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'storeAdvance']);
     });
 });

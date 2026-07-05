@@ -97,7 +97,7 @@ class ClientController extends Controller
 
         return Client::where('tenant_id', $this->tenantId($request))
             ->where('user_id', $request->user()->id)
-            ->with(['subscriptions.plan.services', 'subscriptions.usages.service'])
+            ->with(['subscriptions.plan.services', 'subscriptions.usages.service', 'subscriptions.payments.receipts'])
             ->firstOrFail();
     }
 }

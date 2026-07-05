@@ -117,9 +117,12 @@ class PhaseZeroAvulsoAndWaitlistTest extends TestCase
 
         $paymentId = $this->actingWithToken($ownerToken)->getJson('/api/payments')->json('0.id');
 
-        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/mark-paid")
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'pix',
+        ])
             ->assertOk()
-            ->assertJsonPath('status', 'paid');
+            ->assertJsonPath('status', 'paid')
+            ->assertJsonPath('method', 'pix');
     }
 
     public function test_customer_joins_waitlist_and_staff_sees_it_but_other_customer_does_not(): void

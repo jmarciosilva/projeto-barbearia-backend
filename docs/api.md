@@ -58,8 +58,10 @@ Dados do estabelecimento do usuario logado (por `tenant_id`).
 ### `PATCH /tenant` — somente `owner`
 
 ```json
-{ "name": "Novo nome", "address": "Rua X, 100", "city": "Sao Paulo", "state": "SP" }
+{ "name": "Novo nome", "address": "Rua X, 100", "city": "Sao Paulo", "state": "SP", "professional_payment_day": 5 }
 ```
+
+`professional_payment_day` define o dia do mes usado no extrato de comissao dos profissionais.
 
 ## Planos SaaS
 
@@ -106,8 +108,8 @@ Lista os 3 tiers pagos disponiveis (trial nao aparece aqui — e automatico).
 { "plan_code": "basico" }
 ```
 
-Troca efetiva na hora (sem cobranca real ainda — fica para a Fase 2 com
-Asaas). Se o uso atual exceder o novo limite (ex: 6 profissionais ativos
+Troca efetiva na hora (sem cobranca real ainda — gateway fica para fase
+futura). Se o uso atual exceder o novo limite (ex: 6 profissionais ativos
 indo para o Basico, limite 3), a regra de downgrade (spec 3.5) entra em
 acao automaticamente: os registros mais antigos continuam ativos dentro do
 novo limite, os excedentes viram inativos (profissional com `is_active:
@@ -314,9 +316,62 @@ Profissional so conclui os proprios atendimentos (`403` caso contrario); proprie
 }
 ```
 
-`method`: `pix` | `cash` | `card` | `other` (default `pix`). Quando `status=paid` (na criacao ou via `mark-paid`), a assinatura vinculada e atualizada automaticamente (`payment_status=paid`, `last_payment_at`).
+`method`: `pix` | `credit_card` | `debit_card` | `cash` | `fiado` (default `pix` na criacao).
+
+Em `POST /payments/{id}/mark-paid`, o proprietario deve informar a modalidade escolhida:
+
+```json
+{ "method": "credit_card" }
+```
+
+Se a modalidade for `pix`, `credit_card`, `debit_card` ou `cash`, o pagamento vira `paid` e a assinatura vinculada e atualizada automaticamente (`payment_status=paid`, `last_payment_at`). Se a modalidade for `fiado`, o pagamento fica `pending`, sem `paid_at`, para continuar aparecendo como divida em aberto.
 
 Pagamento avulso (sem assinatura) usa `client_id` e/ou `appointment_id` no lugar de `client_subscription_id` — pelo menos um dos tres e obrigatorio, senao `422`. Na pratica, o pagamento avulso normalmente **nem precisa ser criado manualmente**: `POST /appointments` ja cria um automaticamente quando o agendamento nao tem assinatura (ver secao Agenda). `GET /payments` retorna `client`, `appointment.service` e `subscription.client` carregados, cobrindo os dois tipos de pagamento na mesma tela.
+
+### `POST /payments/{id}/receipts` — somente `owner`
+
+Lanca um recebimento parcial em um pagamento pendente/fiado.
+
+```json
+{ "amount_cents": 4000, "method": "pix", "notes": "Entrada" }
+```
+
+`method`: `pix` | `credit_card` | `debit_card` | `cash`. Se a soma dos recebimentos (`receipts`) atingir o valor total, o pagamento vira `paid`; caso contrario, segue `pending` com `remaining_cents` indicando o saldo.
+
+### `GET /me/payments` — somente `customer`
+
+Retorna os pagamentos do cliente logado, incluindo `receipts`, para separar pendentes e quitados no app.
+
+## Comissoes e adiantamentos
+
+### `GET /me/professional/finance` — somente `professional`
+
+Extrato do profissional logado. Query opcional: `?period=week` ou `?period=month` (default `month`).
+
+```json
+{
+  "completed_count": 6,
+  "gross_cents": 36000,
+  "commission_percentage": 40,
+  "commission_cents": 14400,
+  "advances_cents": 3000,
+  "net_cents": 11400,
+  "payment_day": 5,
+  "advances": []
+}
+```
+
+### `GET /professionals/{id}/finance` — somente `owner`
+
+Mesmo extrato, mas consultado pelo proprietario para gestao do salao.
+
+### `POST /professionals/{id}/advances` — somente `owner`
+
+Lanca um adiantamento ao profissional, abatido do extrato do periodo.
+
+```json
+{ "amount_cents": 3000, "notes": "Adiantamento semanal" }
+```
 
 ## Fila de espera
 

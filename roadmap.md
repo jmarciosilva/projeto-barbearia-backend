@@ -105,31 +105,42 @@ Objetivo: construir a infraestrutura de planos SaaS descrita na especificacao (s
 | Data | Responsavel | Resultado | Evidencias | Pendencias |
 |---|---|---|---|---|
 | 2026-07-03 | Claude | Nao iniciado | Auditoria da especificacao vs. roadmap encontrou a lacuna: so existe `app/Models/SaasSubscription.php` com `plan_name` fixo, sem os 4 tiers nem tabela de limites | Toda a fase — schema `plan_features`, `PlanGate`, trial automatico, upgrade/downgrade |
-| 2026-07-04 | Codex | Em auditoria | Rechecagem encontrou `saas_plans`, vinculo `saas_subscriptions.saas_plan_id`, `PlanGate`, rotas `GET /saas-plans` e `PATCH /saas-subscription`, bloqueio 402 para trial vencido e testes dedicados em `PhaseUmSaasPlansTest`; `php artisan test` passou com 48/48 testes | Multi-unidade ainda e limite numerico, sem CRUD; cobranca real via Asaas permanece para a Fase 2 |
+| 2026-07-04 | Codex | Em auditoria | Rechecagem encontrou `saas_plans`, vinculo `saas_subscriptions.saas_plan_id`, `PlanGate`, rotas `GET /saas-plans` e `PATCH /saas-subscription`, bloqueio 402 para trial vencido e testes dedicados em `PhaseUmSaasPlansTest`; `php artisan test` passou com 48/48 testes | Multi-unidade ainda e limite numerico, sem CRUD; gateway de pagamento permanece para fase futura |
 
-## Fase 2 - Cobranca Automatica e Base Operacional
+## Fase 2 - Cobranca Manual Operacional
 
-Status: `Nao iniciado`
+Status: `Em andamento`
 
-Objetivo: automatizar cobranca recorrente quando o fluxo manual estiver validado.
+Objetivo: profissionalizar a cobranca manual da primeira versao: o dono confirma recebimentos pelo app, escolhe a modalidade usada e consegue manter cobrancas em aberto como fiado.
 
 ### Escopo previsto
 
-- [ ] Integracao Asaas
-- [ ] Webhooks de pagamento
-- [ ] Retry de cobranca
-- [ ] Atualizacao automatica de status `paid`, `pending`, `overdue`
-- [ ] Jobs para vencimento e bloqueio de assinatura
-- [ ] Auditoria de eventos financeiros
-- [ ] Redis e filas quando houver volume
+- [x] Confirmacao manual de pagamento pelo proprietario
+- [x] Modalidades manuais: `pix`, `credit_card`, `debit_card`, `cash`
+- [x] Modalidade `fiado`, mantendo o pagamento pendente
+- [x] Lancamentos parciais de recebimento para quitar fiado aos poucos
+- [x] Atualizacao da assinatura quando o pagamento e quitado
+- [x] Relatorio/lista separada de valores fiados
+- [x] Extrato de comissao do profissional por semana/mes
+- [x] Gestao de adiantamentos ao profissional
+- [x] Configuracao de dia de pagamento dos profissionais
 - [ ] Disparo de notificacao push (FCM) para confirmacao de agendamento e lembrete de vencimento (spec 3.2/4.3, tier Basico) — job assincrono, guarda o token de aparelho por usuario
 
 ### Criterios de aceite
 
-- [ ] Webhook idempotente
-- [ ] Pagamento confirmado atualiza assinatura corretamente
-- [ ] Pagamento atrasado bloqueia uso conforme regra
-- [ ] Testes automatizados cobrindo fluxo feliz e duplicidade de webhook
+- [x] Proprietario escolhe modalidade antes de confirmar pagamento
+- [x] Pagamento confirmado atualiza assinatura corretamente
+- [x] Fiado nao marca como pago e continua pendente
+- [x] Testes automatizados cobrindo todas as modalidades manuais
+- [x] Testes automatizados cobrindo recebimento parcial de fiado
+- [x] Testes automatizados cobrindo extrato de comissao e adiantamento
+
+### Auditoria da fase
+
+| Data | Responsavel | Resultado | Evidencias | Pendencias |
+|---|---|---|---|---|
+| 2026-07-04 | Codex | Em andamento | Escopo corrigido a pedido do usuario: primeira versao nao integra gateway; pagamento e manual pelo dono. Backend passa a exigir modalidade em `POST /payments/{id}/mark-paid`, aceitando `pix`, `credit_card`, `debit_card`, `cash` e `fiado`; `fiado` registra a modalidade mas mantem `status=pending` e nao preenche `paid_at` | Falta cobrir todas as modalidades em testes e criar visao operacional dedicada para fiados |
+| 2026-07-04 | Codex | Parcial aprovado | Fiado ganhou recebimentos parciais em `payment_receipts` e endpoint `POST /payments/{id}/receipts`; cliente ganhou `GET /me/payments`; profissional ganhou extrato `GET /me/professional/finance`; dono ganhou consulta de extrato por profissional, lancamento de adiantamento e configuracao de `professional_payment_day`; `php artisan test` passou com 52/52 testes | Falta notificacao push FCM e validacao em dispositivo real |
 
 ## Fase 3 - Fidelidade e Avaliacoes
 
@@ -197,4 +208,4 @@ Status: `Nao iniciado`
 | 2026-07-03 | Manter portal web fora do lancamento | App mobile e principal no PRD | Reduz superficie de desenvolvimento |
 | 2026-07-03 | Remover a fase "Portal Web Administrativo"; mover "Multi-unidade" para a nova Fase 1 | A especificacao (secoes 1 e 6) define "zero painel web administrativo" como decisao de produto permanente, nao como item so fora do lancamento inicial — "Relatorios avancados" ja e coberto pela Fase 6 (Business Intelligence); "Multi-unidade" e recurso do tier Premium do SaaS, nao depende de painel web | Fase 7 (Inteligencia Artificial) mantem o mesmo numero; nenhuma outra fase referenciava o Portal Web |
 | 2026-07-03 | Inserir a Fase 1 "Planos SaaS e Controle de Acesso" | Trial + 3 tiers pagos + `PlanGate` (secao 3 da especificacao) e o nucleo do modelo de negocio e nao tinha nenhuma fase no roadmap | Fases antigas 1-5 foram renumeradas para 2-6; Fase 7 nao muda |
-| 2026-07-03 | Adicionar disparo de notificacao push (FCM) na Fase 2 | Item nunca tinha sido listado no roadmap do backend, apesar de a especificacao inclui-lo ja no tier Basico (3.2/4.3); mesma decisao tomada no roadmap do mobile — push so faz sentido completo junto com o resto da automacao de cobranca/lembrete, nao na fundacao | Fase 2 passa a cobrir tanto a cobranca via Asaas quanto o disparo de push que ela dispara |
+| 2026-07-03 | Adicionar disparo de notificacao push (FCM) na Fase 2 | Item nunca tinha sido listado no roadmap do backend, apesar de a especificacao inclui-lo ja no tier Basico (3.2/4.3); mesma decisao tomada no roadmap do mobile — push so faz sentido completo junto com o resto da cobranca/lembrete, nao na fundacao | Fase 2 passa a cobrir lembretes ligados a cobranca manual e agendamentos |

@@ -42,6 +42,11 @@ class Professional extends Model
         return $this->hasMany(Appointment::class);
     }
 
+    public function advances(): HasMany
+    {
+        return $this->hasMany(ProfessionalAdvance::class);
+    }
+
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class, 'professional_service')->withTimestamps();
