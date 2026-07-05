@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('professional_id')->constrained()->cascadeOnDelete();
             $table->foreignId('subscription_plan_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
-            $table->unique(['professional_id', 'subscription_plan_id']);
+            $table->unique(['professional_id', 'subscription_plan_id'], 'prof_subscription_plan_unique');
         });
     }
 

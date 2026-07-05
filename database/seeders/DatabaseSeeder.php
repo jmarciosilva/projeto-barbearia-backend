@@ -42,6 +42,9 @@ class DatabaseSeeder extends Seeder
             'city' => 'Sao Paulo',
             'state' => 'SP',
             'status' => 'active',
+            // O seeder usa `WithoutModelEvents`, entao o hook `Tenant::booted()`
+            // que gera o invite_code sozinho nao dispara aqui — precisa setar direto.
+            'invite_code' => Tenant::generateInviteCode(),
         ]);
 
         SaasSubscription::create([

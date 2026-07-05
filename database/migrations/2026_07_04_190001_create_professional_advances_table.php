@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('professional_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('amount_cents');
-            $table->timestamp('paid_at');
+            $table->dateTime('paid_at');
             $table->text('notes')->nullable();
             $table->timestamps();
 

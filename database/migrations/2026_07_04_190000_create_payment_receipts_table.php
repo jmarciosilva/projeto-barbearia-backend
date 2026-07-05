@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('payment_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('amount_cents');
             $table->string('method');
-            $table->timestamp('received_at');
+            $table->dateTime('received_at');
             $table->text('notes')->nullable();
             $table->timestamps();
 

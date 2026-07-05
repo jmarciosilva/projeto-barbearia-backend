@@ -18,8 +18,8 @@ return new class extends Migration
             $table->foreignId('professional_id')->constrained()->restrictOnDelete();
             $table->foreignId('service_id')->constrained()->restrictOnDelete();
             $table->foreignId('client_subscription_id')->nullable()->constrained()->nullOnDelete();
-            $table->timestamp('starts_at');
-            $table->timestamp('ends_at');
+            $table->dateTime('starts_at');
+            $table->dateTime('ends_at');
             $table->string('status')->default('scheduled')->index();
             $table->string('cancellation_reason')->nullable();
             $table->text('notes')->nullable();

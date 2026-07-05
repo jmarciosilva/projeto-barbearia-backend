@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('client_subscription_id')->constrained()->cascadeOnDelete();
             $table->foreignId('service_id')->constrained()->restrictOnDelete();
             $table->foreignId('appointment_id')->nullable()->constrained()->nullOnDelete();
-            $table->timestamp('used_at');
+            $table->dateTime('used_at');
             $table->text('notes')->nullable();
             $table->timestamps();
 
