@@ -10,8 +10,9 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Bloqueio gracioso de fim de trial (spec 3.1): leitura continua liberada
  * (nada e escondido/apagado), mas qualquer escrita para quando o trial vence
- * sem o dono escolher um plano pago. A troca de plano e o logout continuam
- * liberados, senao o dono ficaria trancado sem saida.
+ * sem o dono escolher um plano pago. A troca de plano, o logout e a troca
+ * da propria credencial continuam liberados, senao o dono ficaria trancado
+ * sem saida (inclusive sem conseguir corrigir a propria senha).
  */
 class EnsureTenantPlanIsActive
 {
@@ -21,7 +22,7 @@ class EnsureTenantPlanIsActive
             return $next($request);
         }
 
-        if ($request->is('api/auth/logout') || $request->is('api/saas-subscription')) {
+        if ($request->is('api/auth/logout') || $request->is('api/saas-subscription') || $request->is('api/me/credentials')) {
             return $next($request);
         }
 

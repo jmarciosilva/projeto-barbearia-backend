@@ -79,6 +79,16 @@ Credenciais invalidas ou usuario sem senha cadastrada retornam `422` com `{"erro
 
 Retorna o usuario logado com `tenant.saas_subscription` carregados.
 
+### `PATCH /me/credentials` — qualquer papel autenticado
+
+Troca o proprio e-mail e/ou senha de login. Exige a senha atual por seguranca (evita que uma sessao esquecida aberta troque a credencial sem o dono da conta perceber). Informe **pelo menos um** de `email`/`password`.
+
+```json
+{ "current_password": "senhaAtual123", "email": "novo@example.com", "password": "novaSenha123", "password_confirmation": "novaSenha123" }
+```
+
+Resposta 200 com o usuario atualizado (mesmo formato de `GET /me`). `422` quando `current_password` esta errada, quando nenhum de `email`/`password` e informado, ou quando o novo `email` ja esta em uso por outro usuario. Este endpoint continua liberado mesmo com o trial vencido (junto com `/auth/logout` e `/saas-subscription`), senao o dono ficaria trancado sem conseguir nem corrigir a propria senha. So altera a credencial de login (`User.email`/`password`) — o e-mail de contato guardado em `Client`/`Professional` continua independente.
+
 ### `POST /auth/logout` — qualquer papel autenticado
 
 Revoga o token atual. Resposta `204`.

@@ -37,6 +37,7 @@ Route::get('/user', function (Request $request) {
 // escolher um plano pago (spec 3.1); leitura nunca e afetada.
 Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::patch('/me/credentials', [AuthController::class, 'updateCredentials']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // Dados basicos do estabelecimento sao visiveis para qualquer papel autenticado.

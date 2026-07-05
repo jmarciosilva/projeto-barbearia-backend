@@ -159,6 +159,45 @@ class AuthController extends Controller
         return $request->user()->load('tenant.saasSubscription.plan');
     }
 
+    /**
+     * Troca o proprio e-mail e/ou senha de login, exigindo a senha atual por
+     * seguranca (evita que uma sessao esquecida aberta troque a credencial
+     * sem o dono da conta perceber). Vale para qualquer papel — e o
+     * `User.email`/`password` (login), nao o e-mail de contato guardado em
+     * `Client`/`Professional`, que continua independente.
+     */
+    public function updateCredentials(Request $request)
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['sometimes', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        if (! Hash::check($data['current_password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['Senha atual incorreta.'],
+            ]);
+        }
+
+        abort_if(
+            ! isset($data['email']) && ! isset($data['password']),
+            422,
+            'Informe um novo e-mail ou uma nova senha.'
+        );
+
+        $this->transaction(function () use ($user, $data) {
+            $user->update(array_filter([
+                'email' => $data['email'] ?? null,
+                'password' => $data['password'] ?? null,
+            ]));
+        });
+
+        return $user->fresh()->load('tenant.saasSubscription.plan');
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()?->delete();
