@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\SaasSubscriptionController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\TenantController;
+use App\Http\Controllers\Api\TenantScheduleOverrideController;
 use App\Http\Controllers\Api\WaitlistController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -95,6 +96,9 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     Route::middleware('role:owner')->group(function () {
         Route::patch('/tenant', [TenantController::class, 'update']);
         Route::post('/tenant/invite-code/regenerate', [TenantController::class, 'regenerateInviteCode']);
+        Route::get('/tenant/schedule-overrides', [TenantScheduleOverrideController::class, 'index']);
+        Route::post('/tenant/schedule-overrides', [TenantScheduleOverrideController::class, 'store']);
+        Route::delete('/tenant/schedule-overrides/{scheduleOverride}', [TenantScheduleOverrideController::class, 'destroy']);
         Route::get('/saas-plans', [SaasSubscriptionController::class, 'plans']);
         Route::patch('/saas-subscription', [SaasSubscriptionController::class, 'update']);
         Route::apiResource('professionals', ProfessionalController::class)->only(['store', 'update']);

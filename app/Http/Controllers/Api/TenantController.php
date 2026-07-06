@@ -32,6 +32,10 @@ class TenantController extends Controller
             'state' => ['nullable', 'string', 'size:2'],
             'timezone' => ['nullable', 'string', 'max:80'],
             'professional_payment_day' => ['nullable', 'integer', 'min:1', 'max:31'],
+            'opening_time' => ['nullable', 'date_format:H:i'],
+            'closing_time' => ['nullable', 'date_format:H:i', 'after:opening_time'],
+            'break_start_time' => ['nullable', 'date_format:H:i'],
+            'break_end_time' => ['nullable', 'date_format:H:i', 'after:break_start_time'],
         ]);
 
         $tenant = Tenant::findOrFail($this->tenantId($request));

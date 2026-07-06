@@ -6,6 +6,8 @@ use App\Models\Appointment;
 use App\Models\Payment;
 use App\Models\Professional;
 use App\Models\Service;
+use App\Models\Tenant;
+use App\Models\TenantScheduleOverride;
 use Carbon\Carbon;
 
 /**
@@ -24,6 +26,45 @@ trait CreatesAppointments
             ->where('starts_at', '<', $endsAt)
             ->where('ends_at', '>', $startsAt)
             ->exists();
+    }
+
+    /**
+     * Horario de funcionamento e pausa (ex: almoco) do tenant, com excecao
+     * pontual por data (ver TenantScheduleOverride). Tenant sem nada
+     * configurado (opening/closing_time nulos) mantem o comportamento
+     * anterior, sem nenhuma restricao de horario.
+     */
+    private function assertWithinBusinessHours(int $tenantId, Carbon $startsAt, Carbon $endsAt): void
+    {
+        $tenant = Tenant::findOrFail($tenantId);
+
+        if (! $tenant->opening_time && ! $tenant->closing_time) {
+            return;
+        }
+
+        $override = TenantScheduleOverride::where('tenant_id', $tenantId)
+            ->where('date', $startsAt->toDateString())
+            ->first();
+
+        abort_if($override?->is_closed, 422, 'O salao esta fechado nesta data.');
+
+        $opensAt = $override->opens_at ?? $tenant->opening_time;
+        $closesAt = $override->closes_at ?? $tenant->closing_time;
+
+        if ($opensAt && $closesAt) {
+            abort_if(
+                $startsAt->format('H:i:s') < $opensAt || $endsAt->format('H:i:s') > $closesAt,
+                422,
+                'Fora do horario de funcionamento do salao.'
+            );
+        }
+
+        if ($tenant->break_start_time && $tenant->break_end_time) {
+            $overlapsBreak = $startsAt->format('H:i:s') < $tenant->break_end_time
+                && $endsAt->format('H:i:s') > $tenant->break_start_time;
+
+            abort_if($overlapsBreak, 422, 'O salao esta fechado para pausa neste horario.');
+        }
     }
 
     private function assertProfessionalCanPerformService(Professional $professional, Service $service): void

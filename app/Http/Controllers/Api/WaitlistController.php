@@ -132,6 +132,7 @@ class WaitlistController extends Controller
         $endsAt = $startsAt->copy()->addMinutes($service->duration_minutes);
 
         abort_if($this->hasConflict($tenantId, $professional->id, $startsAt, $endsAt), 422, 'Profissional ja possui agendamento neste horario.');
+        $this->assertWithinBusinessHours($tenantId, $startsAt, $endsAt);
 
         $waitlistEntry = $this->transaction(function () use ($waitlistEntry, $professional, $service, $startsAt, $endsAt, $tenantId) {
             $appointment = Appointment::create([

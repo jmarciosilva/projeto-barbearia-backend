@@ -73,6 +73,7 @@ class AppointmentController extends Controller
         $endsAt = $startsAt->copy()->addMinutes($service->duration_minutes);
 
         $this->assertProfessionalCanPerformService($professional, $service);
+        $this->assertWithinBusinessHours($tenantId, $startsAt, $endsAt);
 
         // Se houver assinatura, validamos inadimplencia, vencimento, servico incluso e restricoes do plano.
         if (! empty($data['client_subscription_id'])) {
@@ -128,8 +129,9 @@ class AppointmentController extends Controller
             $endsAt = $startsAt->copy()->addMinutes($appointment->service->duration_minutes);
             $professionalId = $data['professional_id'] ?? $appointment->professional_id;
 
-            // Remarcacao tambem passa pela mesma checagem de conflito do agendamento.
+            // Remarcacao tambem passa pela mesma checagem de conflito e de horario de funcionamento do agendamento.
             abort_if($this->hasConflict($tenantId, $professionalId, $startsAt, $endsAt, $appointment->id), 422, 'Profissional ja possui agendamento neste horario.');
+            $this->assertWithinBusinessHours($tenantId, $startsAt, $endsAt);
 
             $data['starts_at'] = $startsAt;
             $data['ends_at'] = $endsAt;

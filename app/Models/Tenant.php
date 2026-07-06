@@ -23,6 +23,10 @@ class Tenant extends Model
         'invite_code',
         'units_count',
         'professional_payment_day',
+        'opening_time',
+        'closing_time',
+        'break_start_time',
+        'break_end_time',
     ];
 
     protected static function booted(): void
@@ -92,5 +96,10 @@ class Tenant extends Model
     public function saasSubscription(): HasOne
     {
         return $this->hasOne(SaasSubscription::class);
+    }
+
+    public function scheduleOverrides(): HasMany
+    {
+        return $this->hasMany(TenantScheduleOverride::class);
     }
 }
