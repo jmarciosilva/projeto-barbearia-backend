@@ -47,6 +47,16 @@ class Professional extends Model
         return $this->hasMany(ProfessionalAdvance::class);
     }
 
+    public function workingHours(): HasMany
+    {
+        return $this->hasMany(ProfessionalWorkingHour::class)->orderBy('weekday');
+    }
+
+    public function scheduleOverrides(): HasMany
+    {
+        return $this->hasMany(ProfessionalScheduleOverride::class)->orderBy('date');
+    }
+
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class, 'professional_service')->withTimestamps();

@@ -182,7 +182,46 @@ Objetivo: permitir que o cliente se cadastre sozinho no app, vinculado a um esta
 | 2026-07-05 | Cliente avulso sem convite escolhe o salao em um diretorio publico (nome, cidade, tipo de negocio) | Reduz friccao de cadastro para quem nao recebeu convite de ninguem; aceito o tradeoff de expor a existencia de estabelecimentos concorrentes entre si na mesma cidade |
 | 2026-07-05 | Cadastro de cliente via convite/diretorio entra ativo direto, sem aprovacao manual do dono | Confirmacao de pagamento ja e manual e feita separadamente pelo dono; bloquear o cadastro em si adicionaria friccao sem reduzir risco financeiro real |
 
-## Fase 4 - Fidelidade e Avaliacoes
+## Fase 4 - Painel Inteligente do Proprietario
+
+Status: `Em auditoria`
+
+Objetivo: expor agregacoes prontas para o dashboard do dono ver o dia em 5 segundos (agendamentos, receita) e duas ferramentas de gestao proativa (ocupacao da equipe, priorizacao de retorno de clientes), sem o app precisar computar isso client-side a partir de listas inteiras.
+
+### Escopo previsto
+
+- [x] `GET /dashboard/summary`: contagens de hoje (agendamentos, confirmados, pendentes, cancelamentos, fila de espera) e receita (prevista hoje, recorrente do mes, avulsa do mes)
+- [x] Horario de trabalho do profissional por dia da semana (nova tabela `professional_working_hours`), aceito em `POST/PATCH /professionals`
+- [x] `GET /dashboard/occupancy`: percentual ocupado por profissional/dia da semana (semana corrente), a partir do horario de trabalho cadastrado
+- [x] `GET /dashboard/return-risk`: para clientes com 2+ atendimentos concluidos, dias desde o ultimo atendimento vs. media historica propria, com probabilidade de retorno (heuristica)
+- [x] Ajuste pontual do horario do profissional por data (nova tabela `professional_schedule_overrides`), gerenciado pelo proprio profissional via `/me/professional/schedule-overrides`, afetando o calculo de ocupacao daquele dia especifico
+
+### Criterios de aceite
+
+- [x] `GET /dashboard/summary` reflete corretamente pagamento avulso pendente/pago, cancelamento e fila de espera
+- [x] Horario de trabalho e sincronizado (delete+recreate) sem apagar quando a chave nao e enviada num update parcial, mesmo padrao ja usado por `service_ids`
+- [x] `GET /dashboard/occupancy` calcula ocupacao so para dias com horario configurado, capada em 100%
+- [x] `GET /dashboard/return-risk` exclui clientes com menos de 2 atendimentos concluidos e ordena por quem esta mais "devendo" retornar
+- [x] Profissional cria/le/apaga o proprio ajuste de horario por data, sem conseguir mexer no ajuste de outro colega
+- [x] `GET /dashboard/occupancy` usa o ajuste pontual (inclusive "folga") em vez do horario recorrente quando ha um ajuste para a data
+
+### Decisoes
+
+| Data | Decisao | Motivo |
+|---|---|---|
+| 2026-07-07 | Criar horario de trabalho individual por profissional (`professional_working_hours`), em vez de usar o horario do salao para todos | So existia horario de funcionamento no nivel tenant; ocupacao por profissional exige capacidade individual. Confirmado com o usuario antes de implementar |
+| 2026-07-07 | "Pendente" no resumo do dia = agendamento com `Payment` avulso `status=pending`; "confirmado" = restante dos agendamentos ativos do dia | Agendamento nao tem status "confirmado" separado (`scheduled`/`canceled`/`completed`/`no_show`); semantica definida com o usuario em vez de criar um status novo so para o card |
+| 2026-07-07 | Probabilidade de retorno: razao `dias_desde_ultimo / media_historica` — <0,85 baixa, 0,85-1,6 alta, >1,6 media | Faixas calibradas pelo exemplo do proprio usuario (38 dias, media 25 -> deveria ser "alta"); heuristica simples, IA de verdade continua na Fase 9 |
+| 2026-07-07 | Ajuste pontual de horario (`professional_schedule_overrides`) e tabela separada do horario recorrente, uma linha por profissional+data | Preserva o horario fixo intacto; o profissional so registra o desvio pontual (inclusive "nao vou trabalhar"), sem apagar/recriar o cadastro normal |
+
+### Auditoria da fase
+
+| Data | Responsavel | Resultado | Evidencias | Pendencias |
+|---|---|---|---|---|
+| 2026-07-07 | Claude | Parcial aprovado | Nova migration `professional_working_hours` (unique por profissional+dia da semana); `ProfessionalController::store/update` sincroniza via delete+recreate (mesmo padrao de `service_ids`), com validacao de dia duplicado e fim antes do inicio. Novo `OwnerDashboardController` com `summary()` (usa `Appointment.payment` para distinguir confirmado/pendente, `WaitlistEntry.status=waiting` para a fila, soma de `ClientSubscription` ativas para receita recorrente e `Payment` avulso pago no mes para receita avulsa), `occupancy()` (minutos ocupados/disponiveis por profissional/dia na semana corrente) e `returnRisk()` (media de intervalo entre atendimentos concluidos vs. dias desde o ultimo). 4 testes novos em `PhaseQuatroOwnerDashboardTest` (81/81 testes de backend passando) | Sem validacao ponta a ponta em ambiente real ainda — usuario optou por validar manualmente esta rodada |
+| 2026-07-07 | Claude | Parcial aprovado | Usuario pediu que o profissional pudesse ajustar o proprio horario num dia especifico (chegou mais tarde, etc.), refletindo na ocupacao. Nova migration `professional_schedule_overrides` (`professional_id`+`date` unico, `is_off` para folga, `starts_at`/`ends_at` para o horario daquele dia); novo `ProfessionalScheduleOverrideController` (`me`/`storeMe` com `updateOrCreate` por data/`destroyMe`), exclusivo do proprio profissional logado (nunca mexe no ajuste de outro colega — coberto por teste). `OwnerDashboardController::occupancy()` foi reescrito para iterar as 7 datas reais da semana corrente (nao so o `weekday`) e, pra cada data, checar primeiro se ha ajuste pontual: se `is_off`, o dia some da resposta; se houver horario, usa o do ajuste; senao cai no horario recorrente (`professional_working_hours`) — resposta ganhou `date` e `has_override` por dia. 3 testes novos em `PhaseQuatroOwnerDashboardTest` (80/80 testes de backend passando: CRUD do ajuste com isolamento entre profissionais, ocupacao usando o ajuste em vez do recorrente, e o dia sumindo quando marcado como folga) | Sem validacao ponta a ponta em ambiente real ainda |
+
+## Fase 5 - Fidelidade e Avaliacoes
 
 Status: `Nao iniciado`
 
@@ -193,7 +232,7 @@ Status: `Nao iniciado`
 - [ ] Niveis Bronze, Silver, Gold e Black
 - [ ] Extrato de pontos
 
-## Fase 5 - CRM Avancado e Estoque
+## Fase 6 - CRM Avancado e Estoque
 
 Status: `Nao iniciado`
 
@@ -205,7 +244,7 @@ Status: `Nao iniciado`
 - [ ] Produtos e estoque
 - [ ] Vendas de produtos
 
-## Fase 6 - Marketing Automation
+## Fase 7 - Marketing Automation
 
 Status: `Nao iniciado`
 
@@ -216,7 +255,7 @@ Status: `Nao iniciado`
 - [ ] Recuperacao de cancelamento
 - [ ] Cupons e indicacoes
 
-## Fase 7 - Business Intelligence
+## Fase 8 - Business Intelligence
 
 Status: `Nao iniciado`
 
@@ -229,7 +268,7 @@ Status: `Nao iniciado`
 - [ ] Ocupacao de agenda
 - [ ] Ranking de profissionais
 
-## Fase 8 - Inteligencia Artificial
+## Fase 9 - Inteligencia Artificial
 
 Status: `Nao iniciado`
 
@@ -251,3 +290,4 @@ Status: `Nao iniciado`
 | 2026-07-03 | Adicionar disparo de notificacao push (FCM) na Fase 2 | Item nunca tinha sido listado no roadmap do backend, apesar de a especificacao inclui-lo ja no tier Basico (3.2/4.3); mesma decisao tomada no roadmap do mobile — push so faz sentido completo junto com o resto da cobranca/lembrete, nao na fundacao | Fase 2 passa a cobrir lembretes ligados a cobranca manual e agendamentos |
 | 2026-07-05 | Inserir a Fase 3 "Onboarding e Autocadastro", a pedido do usuario apos revisao de usabilidade | Hoje o cliente so entra no sistema se o dono cadastrar manualmente via `POST /clients`, e nao existe nenhum mecanismo de convite/token/QR nem rota publica de autocadastro — isso nao atende a expectativa de cliente se autocadastrar via convite/link/QR ou de forma avulsa escolhendo o salao | Fases antigas 3-7 (Fidelidade, CRM, Marketing, BI, IA) foram renumeradas para 4-8 |
 | 2026-07-05 | Trocar `DB_CONNECTION` de sqlite para MySQL (banco local `clube_do_salao` no MySQL do XAMPP), a pedido do usuario | Ate aqui o projeto todo (Fases 0-3) rodava contra um arquivo SQLite local; a especificacao (secao 5) sempre previu MySQL/PostgreSQL para producao. SQLite nao forca integridade referencial por padrao, o que escondeu 3 bugs reais de migration que so aparecem em MySQL: (1) `subscription_usages` tinha FK para `appointments` mas rodava antes da tabela existir — migration renomeada de `..._142245_...` para `..._142249_...` pra rodar depois; (2) colunas `timestamp()` obrigatorias sem default (`appointments.starts_at/ends_at`, `payment_receipts.received_at`, `professional_advances.paid_at`, `subscription_usages.used_at`) violam o modo estrito do MySQL (`Invalid default value`) — trocadas para `dateTime()`; (3) nome de indice unico de `professional_subscription_plan` passava de 64 caracteres (limite do MySQL) — index nomeado explicitamente. Tambem corrigido `DatabaseSeeder`: usa `WithoutModelEvents`, entao o hook `Tenant::booted()` que gera o `invite_code` sozinho nao disparava — tenant de demonstracao ficava com `invite_code` nulo; seeder agora gera o codigo explicitamente | `php artisan test` (sqlite `:memory:` via `phpunit.xml`) continua 59/59 sem mudanca; `migrate:fresh --seed` e validacao via curl (diretorio, login, autocadastro por convite) confirmados contra o MySQL real |
+| 2026-07-07 | Inserir a Fase 4 "Painel Inteligente do Proprietario", a pedido do usuario | Nenhuma fase cobria agregacoes de dashboard nem ocupacao/retorno de clientes; o app hoje computava metricas client-side buscando listas inteiras, sem contagens de confirmado/pendente/cancelamento/fila que o usuario pediu | Fases antigas 4-8 (Fidelidade, CRM, Marketing, BI, IA) foram renumeradas para 5-9 |

@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientSubscriptionController;
+use App\Http\Controllers\Api\OwnerDashboardController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ProfessionalScheduleOverrideController;
 use App\Http\Controllers\Api\ProfessionalFinanceController;
 use App\Http\Controllers\Api\ProfessionalController;
 use App\Http\Controllers\Api\SaasSubscriptionController;
@@ -55,6 +57,11 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     Route::get('/me/professional', [ProfessionalController::class, 'me']);
     Route::get('/me/professional/finance', [ProfessionalFinanceController::class, 'me']);
     Route::patch('/me/professional', [ProfessionalController::class, 'updateSelf']);
+    // Ajuste pontual do proprio horario para uma data especifica (ex:
+    // chegou mais tarde hoje), sem mexer no horario recorrente.
+    Route::get('/me/professional/schedule-overrides', [ProfessionalScheduleOverrideController::class, 'me']);
+    Route::post('/me/professional/schedule-overrides', [ProfessionalScheduleOverrideController::class, 'storeMe']);
+    Route::delete('/me/professional/schedule-overrides/{scheduleOverride}', [ProfessionalScheduleOverrideController::class, 'destroyMe']);
     Route::post('/me/client-subscriptions', [ClientSubscriptionController::class, 'subscribeSelf']);
     Route::post('/me/client-subscriptions/cancel', [ClientSubscriptionController::class, 'cancelSelf']);
     Route::get('/me/payments', [PaymentController::class, 'me']);
@@ -111,5 +118,11 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::get('/professionals/{professional}/finance', [ProfessionalFinanceController::class, 'show']);
         Route::get('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'advances']);
         Route::post('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'storeAdvance']);
+
+        // Painel Inteligente do Proprietario (roadmap Fase 4): resumo do dia,
+        // ocupacao da equipe e inteligencia de retorno de clientes.
+        Route::get('/dashboard/summary', [OwnerDashboardController::class, 'summary']);
+        Route::get('/dashboard/occupancy', [OwnerDashboardController::class, 'occupancy']);
+        Route::get('/dashboard/return-risk', [OwnerDashboardController::class, 'returnRisk']);
     });
 });

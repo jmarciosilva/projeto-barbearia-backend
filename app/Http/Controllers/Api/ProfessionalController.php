@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\RunsDatabaseTransactions;
 use App\Http\Controllers\Api\Concerns\UsesTenant;
 use App\Http\Controllers\Controller;
 use App\Models\Professional;
+use App\Models\ProfessionalWorkingHour;
 use App\Models\Service;
 use App\Models\User;
 use App\Support\PlanGate;
@@ -23,7 +24,7 @@ class ProfessionalController extends Controller
         // Cliente monta agendamento a partir desta lista; nao deve ver profissional desativado.
         return Professional::where('tenant_id', $this->tenantId($request))
             ->when($request->user()->role === 'customer', fn ($query) => $query->where('is_active', true))
-            ->with('services')
+            ->with(['services', 'workingHours'])
             ->orderBy('name')
             ->get();
     }
@@ -41,6 +42,10 @@ class ProfessionalController extends Controller
             'password' => ['nullable', 'string', 'min:8'],
             'service_ids' => ['nullable', 'array'],
             'service_ids.*' => ['integer'],
+            'working_hours' => ['nullable', 'array'],
+            'working_hours.*.weekday' => ['required', 'integer', 'min:0', 'max:6'],
+            'working_hours.*.starts_at' => ['required', 'date_format:H:i'],
+            'working_hours.*.ends_at' => ['required', 'date_format:H:i'],
         ]);
 
         // Senha informada libera acesso ao app: exige email proprio e unico entre os logins.
@@ -55,6 +60,8 @@ class ProfessionalController extends Controller
             $found = Service::where('tenant_id', $tenantId)->whereIn('id', $serviceIds)->count();
             abort_if($found !== count(array_unique($serviceIds)), 422, 'Um ou mais servicos nao pertencem ao estabelecimento.');
         }
+
+        $this->assertValidWorkingHours($data['working_hours'] ?? null);
 
         // Limite de profissionais do plano SaaS (spec 3): so vale pra quem entra ja ativo.
         if ($data['is_active'] ?? true) {
@@ -81,17 +88,21 @@ class ProfessionalController extends Controller
                 ]);
             }
 
-            $professional = Professional::create(Arr::except($data, ['password', 'service_ids']) + [
+            $professional = Professional::create(Arr::except($data, ['password', 'service_ids', 'working_hours']) + [
                 'tenant_id' => $tenantId,
                 'user_id' => $user?->id,
             ]);
 
             $professional->services()->sync($serviceIds);
 
+            if (array_key_exists('working_hours', $data)) {
+                $this->syncWorkingHours($professional, $tenantId, $data['working_hours'] ?? []);
+            }
+
             return $professional;
         });
 
-        return response()->json($professional->fresh('services'), 201);
+        return response()->json($professional->fresh(['services', 'workingHours']), 201);
     }
 
     public function update(Request $request, Professional $professional)
@@ -108,6 +119,10 @@ class ProfessionalController extends Controller
             'is_active' => ['nullable', 'boolean'],
             'service_ids' => ['nullable', 'array'],
             'service_ids.*' => ['integer'],
+            'working_hours' => ['nullable', 'array'],
+            'working_hours.*.weekday' => ['required', 'integer', 'min:0', 'max:6'],
+            'working_hours.*.starts_at' => ['required', 'date_format:H:i'],
+            'working_hours.*.ends_at' => ['required', 'date_format:H:i'],
         ]);
 
         if (array_key_exists('service_ids', $data)) {
@@ -116,16 +131,58 @@ class ProfessionalController extends Controller
             abort_if($found !== count(array_unique($serviceIds)), 422, 'Um ou mais servicos nao pertencem ao estabelecimento.');
         }
 
-        $this->transaction(function () use ($professional, $data) {
-            $professional->update(Arr::except($data, ['service_ids']));
+        $this->assertValidWorkingHours($data['working_hours'] ?? null);
 
-            // Omitir a chave em um update nao deve apagar os servicos ja habilitados.
+        $this->transaction(function () use ($professional, $data, $tenantId) {
+            $professional->update(Arr::except($data, ['service_ids', 'working_hours']));
+
+            // Omitir a chave em um update nao deve apagar os servicos/horarios ja cadastrados.
             if (array_key_exists('service_ids', $data)) {
                 $professional->services()->sync($data['service_ids'] ?? []);
             }
+
+            if (array_key_exists('working_hours', $data)) {
+                $this->syncWorkingHours($professional, $tenantId, $data['working_hours'] ?? []);
+            }
         });
 
-        return $professional->fresh('services');
+        return $professional->fresh(['services', 'workingHours']);
+    }
+
+    /**
+     * Impede dois horarios para o mesmo dia da semana e horario de termino
+     * antes do de inicio, antes de qualquer escrita no banco.
+     */
+    private function assertValidWorkingHours(?array $workingHours): void
+    {
+        if (! $workingHours) {
+            return;
+        }
+
+        $weekdays = array_column($workingHours, 'weekday');
+        abort_if(count($weekdays) !== count(array_unique($weekdays)), 422, 'Ha mais de um horario para o mesmo dia da semana.');
+
+        foreach ($workingHours as $entry) {
+            abort_if($entry['ends_at'] <= $entry['starts_at'], 422, 'Horario de termino deve ser depois do horario de inicio.');
+        }
+    }
+
+    /**
+     * Substitui por completo o horario de trabalho do profissional pelo
+     * enviado (delete+recreate), mesmo padrao ja usado para service_ids.
+     */
+    private function syncWorkingHours(Professional $professional, int $tenantId, array $workingHours): void
+    {
+        $professional->workingHours()->delete();
+
+        foreach ($workingHours as $entry) {
+            $professional->workingHours()->create([
+                'tenant_id' => $tenantId,
+                'weekday' => $entry['weekday'],
+                'starts_at' => $entry['starts_at'],
+                'ends_at' => $entry['ends_at'],
+            ]);
+        }
     }
 
     /**
