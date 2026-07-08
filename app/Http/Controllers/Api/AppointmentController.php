@@ -46,6 +46,27 @@ class AppointmentController extends Controller
             ->get();
     }
 
+    /**
+     * Agenda do salao inteiro, para o cliente se programar antes de escolher
+     * entre agendar direto ou entrar na fila de espera. Ao contrario de
+     * `index()`, aqui NUNCA carregamos `client` nem campos sensiveis do
+     * profissional (email/telefone/comissao) — o cliente ve so que horario
+     * esta ocupado, com qual profissional e servico, nunca quem e o outro
+     * cliente.
+     */
+    public function salonSchedule(Request $request)
+    {
+        $tenantId = $this->tenantId($request);
+
+        return Appointment::where('tenant_id', $tenantId)
+            ->where('status', '!=', 'canceled')
+            ->with(['professional:id,name', 'service:id,name,price_cents'])
+            ->when($request->query('from'), fn ($query, $from) => $query->where('starts_at', '>=', $from))
+            ->when($request->query('to'), fn ($query, $to) => $query->where('starts_at', '<=', $to))
+            ->orderBy('starts_at')
+            ->get(['id', 'professional_id', 'service_id', 'starts_at', 'ends_at', 'status']);
+    }
+
     public function store(Request $request)
     {
         $tenantId = $this->tenantId($request);

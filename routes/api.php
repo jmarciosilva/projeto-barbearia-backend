@@ -73,6 +73,9 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::apiResource('services', ServiceController::class)->only(['index']);
         Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['index']);
         Route::apiResource('appointments', AppointmentController::class)->only(['index']);
+        // Agenda do salao inteiro (sem dado de outro cliente), para o cliente se
+        // programar antes de agendar/entrar na fila de espera.
+        Route::get('/appointments/salon', [AppointmentController::class, 'salonSchedule']);
     });
 
     // Remarcar/cancelar tambem e permitido ao cliente, mas so no proprio agendamento
