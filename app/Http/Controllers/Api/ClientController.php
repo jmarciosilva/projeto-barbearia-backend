@@ -100,4 +100,30 @@ class ClientController extends Controller
             ->with(['subscriptions.plan.services', 'subscriptions.usages.service', 'subscriptions.payments.receipts'])
             ->firstOrFail();
     }
+
+    /**
+     * Autoedicao do proprio perfil (nome, telefone e e-mail de contato).
+     * Mesmo padrao de `ProfessionalController::updateSelf`: e-mail/senha de
+     * login continuam exclusivos de `PATCH /me/credentials`, esse endpoint
+     * so mexe nos dados de contato do proprio registro de `Client`.
+     */
+    public function updateSelf(Request $request)
+    {
+        abort_unless($request->user()->role === 'customer', 403, 'Somente clientes podem editar esse perfil.');
+
+        $tenantId = $this->tenantId($request);
+        $client = Client::where('tenant_id', $tenantId)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['sometimes', 'string', 'max:30', Rule::unique('clients')->where('tenant_id', $tenantId)->ignore($client->id)],
+        ]);
+
+        $this->transaction(fn () => $client->update($data));
+
+        return $client->fresh();
+    }
 }

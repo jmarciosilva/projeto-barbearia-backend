@@ -54,6 +54,7 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     // deixa um usuario ler/editar o registro de outra pessoa (mesmo padrao
     // ja usado em AppointmentController::complete).
     Route::get('/me/client', [ClientController::class, 'me']);
+    Route::patch('/me/client', [ClientController::class, 'updateSelf']);
     Route::get('/me/professional', [ProfessionalController::class, 'me']);
     Route::get('/me/professional/finance', [ProfessionalFinanceController::class, 'me']);
     Route::patch('/me/professional', [ProfessionalController::class, 'updateSelf']);

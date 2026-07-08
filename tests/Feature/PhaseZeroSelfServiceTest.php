@@ -116,6 +116,52 @@ class PhaseZeroSelfServiceTest extends TestCase
         $this->actingWithToken($professionalToken)->getJson('/api/me/client')->assertForbidden();
     }
 
+    public function test_client_can_update_own_profile_and_phone_stays_unique_per_tenant(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Perfil Autoedicao', 'owner-perfil-autoedicao@example.com');
+
+        $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Carlos Mendes',
+            'phone' => '11988880050',
+            'email' => 'carlos-autoedicao@example.com',
+            'password' => 'senhaforte1',
+        ])->assertCreated();
+
+        $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Outro Cliente',
+            'phone' => '11988880051',
+        ])->assertCreated();
+
+        $customerToken = $this->postJson('/api/auth/login', [
+            'email' => 'carlos-autoedicao@example.com',
+            'password' => 'senhaforte1',
+        ])->json('token');
+
+        $updated = $this->actingWithToken($customerToken)->patchJson('/api/me/client', [
+            'name' => 'Carlos Alberto Mendes',
+            'phone' => '11988889999',
+            'email' => 'carlos-contato-novo@example.com',
+        ])->assertOk();
+
+        $updated->assertJsonPath('name', 'Carlos Alberto Mendes');
+        $updated->assertJsonPath('phone', '11988889999');
+        $updated->assertJsonPath('email', 'carlos-contato-novo@example.com');
+
+        // Telefone ja usado por outro cliente do mesmo salao deve ser rejeitado.
+        $this->actingWithToken($customerToken)->patchJson('/api/me/client', [
+            'phone' => '11988880051',
+        ])->assertStatus(422);
+
+        $this->actingWithToken($ownerToken)->patchJson('/api/me/client', [
+            'name' => 'Hackeando',
+        ])->assertForbidden();
+
+        $professionalToken = $this->professionalToken($ownerToken, 'ana-perfil-autoedicao@example.com');
+        $this->actingWithToken($professionalToken)->patchJson('/api/me/client', [
+            'name' => 'Hackeando',
+        ])->assertForbidden();
+    }
+
     public function test_me_professional_returns_own_data_and_update_ignores_commission(): void
     {
         $ownerToken = $this->ownerToken('Salao Perfil Profissional', 'owner-perfil-prof@example.com');
