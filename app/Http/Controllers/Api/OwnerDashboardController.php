@@ -61,6 +61,16 @@ class OwnerDashboardController extends Controller
             ->whereBetween('paid_at', [$monthStart, $monthEnd])
             ->sum('amount_cents');
 
+        // Fiado = pagamento que o dono explicitamente marcou com esse metodo
+        // (nao um avulso comum ainda aguardando a primeira confirmacao, que
+        // tambem fica com status=pending mas method continua o default).
+        $openDebtCents = (int) Payment::where('tenant_id', $tenantId)
+            ->where('method', 'fiado')
+            ->where('status', 'pending')
+            ->with('receipts')
+            ->get()
+            ->sum('remaining_cents');
+
         return [
             'appointments_today' => $appointmentsToday->count(),
             'confirmed_today' => $activeToday->count() - $pendingToday->count(),
@@ -70,6 +80,7 @@ class OwnerDashboardController extends Controller
             'expected_revenue_today_cents' => $expectedRevenueTodayCents,
             'recurring_revenue_month_cents' => $recurringRevenueMonthCents,
             'walkin_revenue_month_cents' => $walkinRevenueMonthCents,
+            'open_debt_cents' => $openDebtCents,
         ];
     }
 

@@ -78,6 +78,23 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
             'payment_status' => 'paid',
         ])->assertCreated();
 
+        // Fiado com recebimento parcial (ontem, pra nao afetar as metricas de hoje):
+        // deve contar so o saldo restante, nao o valor cheio.
+        $debtAppointment = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $client,
+            'professional_id' => $professional,
+            'service_id' => $service,
+            'starts_at' => now()->subDay()->setTime(9, 0),
+        ])->assertCreated();
+        $debtPaymentId = $debtAppointment->json('payment.id');
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$debtPaymentId}/mark-paid", [
+            'method' => 'fiado',
+        ])->assertOk();
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$debtPaymentId}/receipts", [
+            'amount_cents' => 2000,
+            'method' => 'pix',
+        ])->assertOk();
+
         $summary = $this->actingWithToken($ownerToken)->getJson('/api/dashboard/summary')->assertOk();
 
         $summary->assertJsonPath('appointments_today', 3);
@@ -88,6 +105,10 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
         $summary->assertJsonPath('expected_revenue_today_cents', 12000);
         $summary->assertJsonPath('recurring_revenue_month_cents', 9990);
         $summary->assertJsonPath('walkin_revenue_month_cents', 6000);
+        // 6000 (preco do servico) - 2000 (recebido parcial) = 4000 em aberto.
+        // O avulso pendente comum (linha ~32, method=pix default) nao entra
+        // nessa soma, so o que o dono marcou como fiado de fato.
+        $summary->assertJsonPath('open_debt_cents', 4000);
     }
 
     public function test_occupancy_uses_professional_working_hours_and_this_weeks_appointments(): void
