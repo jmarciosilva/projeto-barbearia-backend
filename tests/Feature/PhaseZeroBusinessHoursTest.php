@@ -216,7 +216,7 @@ class PhaseZeroBusinessHoursTest extends TestCase
             ->assertJsonCount(0);
     }
 
-    public function test_professional_and_customer_cannot_manage_schedule_overrides(): void
+    public function test_professional_and_customer_cannot_write_schedule_overrides_but_can_read(): void
     {
         $ownerToken = $this->ownerToken('Salao Excecoes Restrito', 'owner-excecoes-restrito@example.com');
         $customerToken = $this->customerToken($ownerToken, 'cliente-excecoes@example.com');
@@ -226,7 +226,19 @@ class PhaseZeroBusinessHoursTest extends TestCase
             'is_closed' => true,
         ])->assertForbidden();
 
+        $override = $this->actingWithToken($ownerToken)->postJson('/api/tenant/schedule-overrides', [
+            'date' => now()->addDay()->toDateString(),
+            'is_closed' => true,
+        ])->assertCreated()->json('id');
+
+        // Leitura precisa ficar liberada: e o que a tela de agendamento do
+        // cliente usa pra montar os horarios disponiveis (bug real reportado
+        // pelo usuario — cliente recebia 403 ao tentar agendar).
         $this->actingWithToken($customerToken)->getJson('/api/tenant/schedule-overrides')
+            ->assertOk()
+            ->assertJsonCount(1);
+
+        $this->actingWithToken($customerToken)->deleteJson("/api/tenant/schedule-overrides/{$override}")
             ->assertForbidden();
     }
 

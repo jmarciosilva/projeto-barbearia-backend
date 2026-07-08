@@ -76,6 +76,10 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         // Agenda do salao inteiro (sem dado de outro cliente), para o cliente se
         // programar antes de agendar/entrar na fila de espera.
         Route::get('/appointments/salon', [AppointmentController::class, 'salonSchedule']);
+        // Leitura das excecoes de horario (sem dado sensivel) e necessaria para
+        // qualquer papel montar a agenda de horarios disponiveis; so a escrita
+        // (criar/apagar excecao) continua exclusiva do dono, no grupo abaixo.
+        Route::get('/tenant/schedule-overrides', [TenantScheduleOverrideController::class, 'index']);
     });
 
     // Remarcar/cancelar tambem e permitido ao cliente, mas so no proprio agendamento
@@ -106,7 +110,6 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
     Route::middleware('role:owner')->group(function () {
         Route::patch('/tenant', [TenantController::class, 'update']);
         Route::post('/tenant/invite-code/regenerate', [TenantController::class, 'regenerateInviteCode']);
-        Route::get('/tenant/schedule-overrides', [TenantScheduleOverrideController::class, 'index']);
         Route::post('/tenant/schedule-overrides', [TenantScheduleOverrideController::class, 'store']);
         Route::delete('/tenant/schedule-overrides/{scheduleOverride}', [TenantScheduleOverrideController::class, 'destroy']);
         Route::get('/saas-plans', [SaasSubscriptionController::class, 'plans']);

@@ -10,7 +10,9 @@ use Illuminate\Http\Request;
 
 /**
  * Excecoes pontuais ao horario padrao do estabelecimento (ver
- * `CreatesAppointments::assertWithinBusinessHours`). Exclusivo do dono.
+ * `CreatesAppointments::assertWithinBusinessHours`). Leitura liberada a
+ * qualquer papel autenticado do tenant (necessaria para montar a agenda de
+ * horarios disponiveis); criar/apagar excecao continua exclusivo do dono.
  */
 class TenantScheduleOverrideController extends Controller
 {
