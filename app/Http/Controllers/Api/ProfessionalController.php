@@ -50,6 +50,17 @@ class ProfessionalController extends Controller
 
         // Senha informada libera acesso ao app: exige email proprio e unico entre os logins.
         if (! empty($data['password'])) {
+            // Caso comum (dono e o proprio profissional, ex: salao de 1 pessoa): o
+            // e-mail informado e o mesmo do login do dono. Nao da pra criar um
+            // segundo User com o mesmo e-mail (login busca por e-mail unico), mas
+            // o dono nao precisa de login separado pra gerenciar o proprio perfil
+            // de profissional — ele ja faz isso autenticado como owner.
+            abort_if(
+                ! empty($data['email']) && strcasecmp($data['email'], $request->user()->email) === 0,
+                422,
+                'Este e-mail ja e o seu login de proprietario. Deixe o e-mail e a senha de acesso em branco para cadastrar este profissional sem um login separado — voce continua gerenciando o proprio perfil de profissional pela sua conta de dono.'
+            );
+
             $request->validate([
                 'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             ]);
