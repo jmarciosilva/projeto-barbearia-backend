@@ -191,7 +191,7 @@ class AppointmentController extends Controller
             return $appointment;
         });
 
-        return $appointment->fresh(['client', 'professional', 'service', 'subscription.usages']);
+        return $appointment->fresh(['client', 'professional', 'service', 'subscription.usages', 'payment']);
     }
 
     private function assertSubscriptionCanBook(int $tenantId, int $clientId, int $subscriptionId, int $serviceId, int $professionalId, Carbon $startsAt): void

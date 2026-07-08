@@ -46,6 +46,44 @@ class PhaseZeroAvulsoAndWaitlistTest extends TestCase
         $payments->assertJsonPath('0.client_subscription_id', null);
     }
 
+    public function test_completing_avulso_appointment_returns_pending_payment_for_confirmation(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Concluir Com Pagamento', 'owner-concluir-pagamento@example.com');
+
+        $service = $this->actingWithToken($ownerToken)->postJson('/api/services', [
+            'name' => 'Corte masculino',
+            'duration_minutes' => 30,
+            'price_cents' => 6000,
+        ])->assertCreated()->json('id');
+
+        $professional = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Ana Souza',
+        ])->assertCreated()->json('id');
+
+        $client = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Carlos Mendes',
+            'phone' => '11988880099',
+        ])->assertCreated()->json('id');
+
+        $appointmentId = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $client,
+            'professional_id' => $professional,
+            'service_id' => $service,
+            'starts_at' => now()->addDay()->setTime(9, 0),
+        ])->assertCreated()->json('id');
+
+        // Concluir o atendimento precisa devolver o pagamento avulso pendente
+        // junto (spec: app oferece confirmar o pagamento na propria tela de
+        // conclusao, sem o dono precisar navegar ate "Pagamentos pendentes").
+        $completed = $this->actingWithToken($ownerToken)
+            ->postJson("/api/appointments/{$appointmentId}/complete")
+            ->assertOk();
+
+        $completed->assertJsonPath('status', 'completed');
+        $completed->assertJsonPath('payment.amount_cents', 6000);
+        $completed->assertJsonPath('payment.status', 'pending');
+    }
+
     public function test_appointment_with_subscription_does_not_create_avulso_payment(): void
     {
         $ownerToken = $this->ownerToken('Salao Assinante Sem Avulso', 'owner-assinante-sem-avulso@example.com');
