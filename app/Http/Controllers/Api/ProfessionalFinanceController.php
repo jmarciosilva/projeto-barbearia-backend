@@ -84,6 +84,14 @@ class ProfessionalFinanceController extends Controller
         $commissionPercentage = $professional->commission_percentage ?? 0;
         $commissionCents = (int) round($grossCents * ($commissionPercentage / 100));
 
+        // Separa avulso (sem assinatura) de plano (com assinatura), tanto em
+        // quantidade quanto em valor, para o profissional entender de onde
+        // vem o proprio volume/receita do mes.
+        $avulsoAppointments = $appointments->whereNull('client_subscription_id');
+        $planoAppointments = $appointments->whereNotNull('client_subscription_id');
+        $avulsoRevenueCents = (int) $avulsoAppointments->sum(fn (Appointment $appointment) => $appointment->service?->price_cents ?? 0);
+        $planoRevenueCents = (int) $planoAppointments->sum(fn (Appointment $appointment) => $appointment->service?->price_cents ?? 0);
+
         $advances = ProfessionalAdvance::where('tenant_id', $this->tenantId($request))
             ->where('professional_id', $professional->id)
             ->whereBetween('paid_at', [$from, $to])
@@ -101,7 +109,11 @@ class ProfessionalFinanceController extends Controller
             'to' => $to->toDateString(),
             'payment_day' => $tenant?->professional_payment_day ?? 5,
             'completed_count' => $appointments->count(),
+            'avulso_count' => $avulsoAppointments->count(),
+            'plano_count' => $planoAppointments->count(),
             'gross_cents' => $grossCents,
+            'avulso_revenue_cents' => $avulsoRevenueCents,
+            'plano_revenue_cents' => $planoRevenueCents,
             'commission_percentage' => $commissionPercentage,
             'commission_cents' => $commissionCents,
             'advances_cents' => $advancesCents,
