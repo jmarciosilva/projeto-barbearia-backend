@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -208,6 +209,131 @@ class PhaseDoisManualPaymentsTest extends TestCase
             'id' => $paymentId,
             'status' => 'pending',
         ]);
+    }
+
+    public function test_owner_edits_amount_and_method_of_a_confirmed_payment(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Edicao', 'owner-edicao@example.com');
+        $paymentId = $this->pendingSubscriptionPayment($ownerToken, 'pix');
+
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'debit_card',
+        ])->assertOk();
+
+        $this->actingWithToken($ownerToken)->patchJson("/api/payments/{$paymentId}", [
+            'amount_cents' => 8000,
+            'method' => 'credit_card',
+            'notes' => 'Corrigido apos lancamento duplicado',
+        ])->assertOk()
+            ->assertJsonPath('amount_cents', 8000)
+            ->assertJsonPath('method', 'credit_card')
+            ->assertJsonPath('status', 'paid');
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'amount_cents' => 8000,
+            'method' => 'credit_card',
+            'status' => 'paid',
+        ]);
+    }
+
+    public function test_owner_cannot_edit_amount_below_what_was_already_received(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Edicao Invalida', 'owner-edicao-invalida@example.com');
+        $paymentId = $this->pendingSubscriptionPayment($ownerToken, 'pix');
+
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'fiado',
+        ])->assertOk();
+
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/receipts", [
+            'amount_cents' => 4000,
+            'method' => 'pix',
+        ])->assertOk();
+
+        $this->actingWithToken($ownerToken)->patchJson("/api/payments/{$paymentId}", [
+            'amount_cents' => 3000,
+        ])->assertStatus(422);
+    }
+
+    public function test_deleting_a_duplicate_subscription_payment_keeps_subscription_paid(): void
+    {
+        // Cenario real reportado pelo usuario: dono lancou o pagamento da
+        // mesma assinatura duas vezes (debito e credito por engano).
+        // Apagar UM dos dois nao pode derrubar a assinatura pra "pending",
+        // porque o outro pagamento continua provando que ela foi paga.
+        $ownerToken = $this->ownerToken('Salao Duplicado', 'owner-duplicado@example.com');
+        $paymentId = $this->pendingSubscriptionPayment($ownerToken, 'pix');
+
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'debit_card',
+        ])->assertOk();
+
+        $subscriptionId = Payment::find($paymentId)->client_subscription_id;
+
+        $duplicatePaymentId = $this->actingWithToken($ownerToken)->postJson('/api/payments', [
+            'client_subscription_id' => $subscriptionId,
+            'amount_cents' => 9990,
+            'method' => 'credit_card',
+            'status' => 'paid',
+        ])->assertCreated()->json('id');
+
+        $this->assertDatabaseHas('client_subscriptions', [
+            'id' => $subscriptionId,
+            'payment_status' => 'paid',
+        ]);
+
+        $this->actingWithToken($ownerToken)->deleteJson("/api/payments/{$duplicatePaymentId}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('payments', ['id' => $duplicatePaymentId]);
+        $this->assertDatabaseHas('client_subscriptions', [
+            'id' => $subscriptionId,
+            'payment_status' => 'paid',
+        ]);
+
+        $this->actingWithToken($ownerToken)->deleteJson("/api/payments/{$paymentId}")
+            ->assertNoContent();
+
+        $this->assertDatabaseHas('client_subscriptions', [
+            'id' => $subscriptionId,
+            'payment_status' => 'pending',
+        ]);
+    }
+
+    public function test_owner_deletes_an_avulso_payment(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Exclui Avulso', 'owner-exclui-avulso@example.com');
+
+        $clientId = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Cliente Avulso Exclui',
+            'phone' => '11988885555',
+        ])->assertCreated()->json('id');
+
+        $paymentId = $this->actingWithToken($ownerToken)->postJson('/api/payments', [
+            'client_id' => $clientId,
+            'amount_cents' => 6000,
+            'status' => 'paid',
+        ])->assertCreated()->json('id');
+
+        $this->actingWithToken($ownerToken)->deleteJson("/api/payments/{$paymentId}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('payments', ['id' => $paymentId]);
+    }
+
+    public function test_editing_or_deleting_a_payment_from_another_tenant_is_not_found(): void
+    {
+        $ownerAToken = $this->ownerToken('Salao A Pagamento', 'owner-a-pagamento@example.com');
+        $ownerBToken = $this->ownerToken('Salao B Pagamento', 'owner-b-pagamento@example.com');
+        $paymentId = $this->pendingSubscriptionPayment($ownerAToken, 'pix');
+
+        $this->actingWithToken($ownerBToken)->patchJson("/api/payments/{$paymentId}", [
+            'amount_cents' => 1000,
+        ])->assertNotFound();
+
+        $this->actingWithToken($ownerBToken)->deleteJson("/api/payments/{$paymentId}")
+            ->assertNotFound();
     }
 
     private function pendingSubscriptionPayment(string $ownerToken, string $method): int

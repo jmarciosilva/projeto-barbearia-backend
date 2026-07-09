@@ -103,6 +103,66 @@ class PaymentController extends Controller
         return response()->json($payment->fresh(['client', 'appointment.service', 'subscription.client', 'receipts']), 201);
     }
 
+    // Corrige um lancamento ja confirmado (valor/metodo/observacao digitados
+    // errado, ex: dono lancou o mesmo pagamento duas vezes com metodos
+    // diferentes). Nao mexe em status/paid_at — isso continua exclusivo de
+    // markPaid/receive, que sao transicoes de confirmacao, nao edicao.
+    public function update(Request $request, Payment $payment)
+    {
+        abort_if($payment->tenant_id !== $this->tenantId($request), 404);
+
+        $data = $request->validate([
+            'amount_cents' => ['nullable', 'integer', 'min:1'],
+            'method' => ['nullable', Rule::in(['pix', 'credit_card', 'debit_card', 'cash'])],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        // Nao deixa o valor cair abaixo do que ja foi recebido via recibo de
+        // verdade (nao usa o accessor received_cents aqui: pra um pagamento
+        // confirmado de uma vez so, sem nenhum PaymentReceipt, esse accessor
+        // so devolve o proprio amount_cents de volta — comparar contra ele
+        // bloquearia qualquer correcao de valor, mesmo sem nenhum recibo
+        // real de por meio).
+        if (isset($data['amount_cents'])) {
+            $actuallyReceivedCents = (int) $payment->receipts()->sum('amount_cents');
+            abort_if(
+                $data['amount_cents'] < $actuallyReceivedCents,
+                422,
+                'O valor nao pode ser menor que o que ja foi recebido.'
+            );
+        }
+
+        $payment = $this->transaction(fn () => tap($payment)->update($data));
+
+        return $payment->fresh(['client', 'appointment.service', 'subscription.client', 'subscription.plan', 'receipts']);
+    }
+
+    // Remove um lancamento errado (ex: pagamento duplicado). Se o pagamento
+    // era a prova de que uma assinatura estava paga, recalcula
+    // payment_status — so volta pra "pending" se nenhum outro pagamento
+    // dessa assinatura continuar com status=paid (senao um duplicado
+    // removido derrubaria uma assinatura que continua paga de verdade).
+    public function destroy(Request $request, Payment $payment)
+    {
+        abort_if($payment->tenant_id !== $this->tenantId($request), 404);
+
+        $this->transaction(function () use ($payment) {
+            $subscriptionId = $payment->client_subscription_id;
+            $payment->delete();
+
+            if ($subscriptionId) {
+                $subscription = ClientSubscription::find($subscriptionId);
+                $stillPaid = $subscription?->payments()->where('status', 'paid')->exists();
+
+                if ($subscription && ! $stillPaid) {
+                    $subscription->update(['payment_status' => 'pending']);
+                }
+            }
+        });
+
+        return response()->noContent();
+    }
+
     public function markPaid(Request $request, Payment $payment)
     {
         abort_if($payment->tenant_id !== $this->tenantId($request), 404);

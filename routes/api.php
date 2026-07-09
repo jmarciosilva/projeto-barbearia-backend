@@ -137,7 +137,7 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::apiResource('services', ServiceController::class)->only(['store', 'update']);
         Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['store', 'update']);
         Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['update']);
-        Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
+        Route::apiResource('payments', PaymentController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::post('/payments/{payment}/receipts', [PaymentController::class, 'receive']);
         Route::get('/professionals/{professional}/finance', [ProfessionalFinanceController::class, 'show']);
         Route::get('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'advances']);
