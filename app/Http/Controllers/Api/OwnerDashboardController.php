@@ -57,26 +57,27 @@ class OwnerDashboardController extends Controller
             ->get()
             ->sum(fn (ClientSubscription $subscription) => $subscription->plan?->price_cents ?? 0);
 
-        // Receita do mes (avulso): conta o que de fato entrou no caixa este
-        // mes, nao so o que ja foi totalmente quitado. Pagamento confirmado
-        // na hora (markPaid, sem recibo) conta o valor cheio no mes do
-        // paid_at; pagamento recebido aos poucos (fiado com recebimentos
-        // parciais, ver PaymentController::receive) tem cada recibo somado
-        // no mes em que foi de fato recebido — senao um recebimento parcial
-        // ficava invisivel na receita do mes ate o fiado ser quitado por
-        // completo, e nesse ponto contava tudo de uma vez no mes errado.
+        // Receita do mes: todo pagamento de fato confirmado este mes, avulso
+        // ou de assinatura (client_subscription_id nao importa aqui — isso e
+        // diferente de `recurring_revenue_month_cents` acima, que e uma
+        // projecao pelo preco do plano das assinaturas ativas, nao pelo que
+        // realmente foi pago). Pagamento confirmado na hora (markPaid, sem
+        // recibo) conta o valor cheio no mes do paid_at; pagamento recebido
+        // aos poucos (fiado com recebimentos parciais, ver
+        // PaymentController::receive) tem cada recibo somado no mes em que
+        // foi de fato recebido — senao um recebimento parcial ficava
+        // invisivel na receita do mes ate o fiado ser quitado por completo,
+        // e nesse ponto contava tudo de uma vez no mes errado.
         // `doesntHave('receipts')` evita contar duas vezes o pagamento que
         // terminou de ser quitado via recibo (ja somado abaixo).
         $walkinRevenueMonthCents = (int) Payment::where('tenant_id', $tenantId)
             ->where('status', 'paid')
-            ->whereNull('client_subscription_id')
             ->whereBetween('paid_at', [$monthStart, $monthEnd])
             ->doesntHave('receipts')
             ->sum('amount_cents');
 
         $walkinRevenueMonthCents += (int) PaymentReceipt::where('tenant_id', $tenantId)
             ->whereBetween('received_at', [$monthStart, $monthEnd])
-            ->whereHas('payment', fn ($query) => $query->whereNull('client_subscription_id'))
             ->sum('amount_cents');
 
         // Fiado = pagamento que o dono explicitamente marcou com esse metodo

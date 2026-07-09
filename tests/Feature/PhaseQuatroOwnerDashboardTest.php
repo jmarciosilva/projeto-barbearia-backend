@@ -113,6 +113,51 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
         $summary->assertJsonPath('open_debt_cents', 4000);
     }
 
+    public function test_walkin_revenue_includes_confirmed_subscription_payment(): void
+    {
+        // Bug real reportado pelo usuario: pagamento de uma assinatura
+        // (client_subscription_id preenchido) confirmado no mes nao entrava
+        // na receita do mes, so o avulso — "recorrente do mes" e uma
+        // projecao pelo preco do plano, nao reflete pagamento de verdade.
+        $ownerToken = $this->ownerToken('Salao Receita Assinatura', 'owner-receita-assinatura@example.com');
+
+        $service = $this->actingWithToken($ownerToken)->postJson('/api/services', [
+            'name' => 'Corte de cabelo feminino',
+            'duration_minutes' => 60,
+            'price_cents' => 9990,
+        ])->assertCreated()->json('id');
+
+        $client = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Fernanda do Bairro',
+            'phone' => '11988880012',
+        ])->assertCreated()->json('id');
+
+        $plan = $this->actingWithToken($ownerToken)->postJson('/api/subscription-plans', [
+            'name' => 'Plano Feminino',
+            'price_cents' => 9990,
+            'services' => [['id' => $service]],
+        ])->assertCreated()->json('id');
+
+        $subscription = $this->actingWithToken($ownerToken)->postJson('/api/client-subscriptions', [
+            'client_id' => $client,
+            'subscription_plan_id' => $plan,
+            'starts_on' => now()->toDateString(),
+        ])->assertCreated()->json('id');
+
+        $payment = $this->actingWithToken($ownerToken)->postJson('/api/payments', [
+            'client_subscription_id' => $subscription,
+            'amount_cents' => 9990,
+        ])->assertCreated()->json('id');
+
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$payment}/mark-paid", [
+            'method' => 'pix',
+        ])->assertOk();
+
+        $summary = $this->actingWithToken($ownerToken)->getJson('/api/dashboard/summary')->assertOk();
+
+        $summary->assertJsonPath('walkin_revenue_month_cents', 9990);
+    }
+
     public function test_walkin_revenue_does_not_double_count_a_fiado_quitado_via_multiple_receipts(): void
     {
         $ownerToken = $this->ownerToken('Salao Receita Fiado', 'owner-receita-fiado@example.com');

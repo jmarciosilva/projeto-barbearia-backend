@@ -372,7 +372,7 @@ Em `POST /payments/{id}/mark-paid`, o proprietario deve informar a modalidade es
 
 Se a modalidade for `pix`, `credit_card`, `debit_card` ou `cash`, o pagamento vira `paid` e a assinatura vinculada e atualizada automaticamente (`payment_status=paid`, `last_payment_at`). Se a modalidade for `fiado`, o pagamento fica `pending`, sem `paid_at`, para continuar aparecendo como divida em aberto.
 
-Pagamento avulso (sem assinatura) usa `client_id` e/ou `appointment_id` no lugar de `client_subscription_id` — pelo menos um dos tres e obrigatorio, senao `422`. Na pratica, o pagamento avulso normalmente **nem precisa ser criado manualmente**: `POST /appointments` ja cria um automaticamente quando o agendamento nao tem assinatura (ver secao Agenda). `GET /payments` retorna `client`, `appointment.service` e `subscription.client` carregados, cobrindo os dois tipos de pagamento na mesma tela.
+Pagamento avulso (sem assinatura) usa `client_id` e/ou `appointment_id` no lugar de `client_subscription_id` — pelo menos um dos tres e obrigatorio, senao `422`. Na pratica, o pagamento avulso normalmente **nem precisa ser criado manualmente**: `POST /appointments` ja cria um automaticamente quando o agendamento nao tem assinatura (ver secao Agenda). `GET /payments` retorna `client`, `appointment.service` e `subscription.client`/`subscription.plan` carregados, cobrindo os dois tipos de pagamento na mesma tela.
 
 ### `POST /payments/{id}/receipts` — somente `owner`
 

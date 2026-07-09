@@ -21,7 +21,7 @@ class PaymentController extends Controller
     public function index(Request $request)
     {
         return Payment::where('tenant_id', $this->tenantId($request))
-            ->with(['client', 'appointment.service', 'subscription.client', 'receipts'])
+            ->with(['client', 'appointment.service', 'subscription.client', 'subscription.plan', 'receipts'])
             ->latest()
             ->get();
     }
