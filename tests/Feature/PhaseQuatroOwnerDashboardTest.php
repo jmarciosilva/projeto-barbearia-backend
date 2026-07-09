@@ -265,6 +265,115 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
         $occupancy->assertJsonCount(0, '0.days');
     }
 
+    public function test_team_performance_aggregates_completed_appointments_per_professional(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Desempenho', 'owner-desempenho@example.com');
+
+        $service = $this->actingWithToken($ownerToken)->postJson('/api/services', [
+            'name' => 'Corte masculino',
+            'duration_minutes' => 30,
+            'price_cents' => 6000,
+        ])->assertCreated()->json('id');
+
+        $topProfessionalId = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Ana Souza',
+            'commission_percentage' => 50,
+        ])->assertCreated()->json('id');
+
+        $otherProfessionalId = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Rafael Souza',
+            'commission_percentage' => 40,
+        ])->assertCreated()->json('id');
+
+        $client = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Carlos Mendes',
+            'phone' => '11988880030',
+        ])->assertCreated()->json('id');
+
+        $plan = $this->actingWithToken($ownerToken)->postJson('/api/subscription-plans', [
+            'name' => 'Bronze',
+            'price_cents' => 9990,
+            'services' => [['id' => $service]],
+        ])->assertCreated()->json('id');
+        $subscriptionId = $this->actingWithToken($ownerToken)->postJson('/api/client-subscriptions', [
+            'client_id' => $client,
+            'subscription_plan_id' => $plan,
+            'starts_on' => now()->startOfMonth()->toDateString(),
+            'payment_status' => 'paid',
+        ])->assertCreated()->json('id');
+
+        // Ana: 2 avulsos + 1 plano concluidos este mes = 3 atendimentos, 18000 centavos.
+        foreach ([2, 3] as $day) {
+            $appointmentId = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+                'client_id' => $client,
+                'professional_id' => $topProfessionalId,
+                'service_id' => $service,
+                'starts_at' => now()->startOfMonth()->addDays($day),
+            ])->assertCreated()->json('id');
+            $this->actingWithToken($ownerToken)->postJson("/api/appointments/{$appointmentId}/complete")->assertOk();
+        }
+        $planoAppointmentId = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $client,
+            'professional_id' => $topProfessionalId,
+            'service_id' => $service,
+            'client_subscription_id' => $subscriptionId,
+            'starts_at' => now()->startOfMonth()->addDays(4),
+        ])->assertCreated()->json('id');
+        $this->actingWithToken($ownerToken)->postJson("/api/appointments/{$planoAppointmentId}/complete")->assertOk();
+
+        // Rafael: 1 avulso concluido este mes = 6000 centavos.
+        $rafaelAppointmentId = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $client,
+            'professional_id' => $otherProfessionalId,
+            'service_id' => $service,
+            'starts_at' => now()->startOfMonth()->addDays(5),
+        ])->assertCreated()->json('id');
+        $this->actingWithToken($ownerToken)->postJson("/api/appointments/{$rafaelAppointmentId}/complete")->assertOk();
+
+        // Agendamento futuro (nao concluido) nao deve contar para nenhum dos dois.
+        $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $client,
+            'professional_id' => $otherProfessionalId,
+            'service_id' => $service,
+            'starts_at' => now()->startOfMonth()->addDays(6),
+        ])->assertCreated();
+
+        $performance = $this->actingWithToken($ownerToken)->getJson('/api/dashboard/team-performance')->assertOk();
+
+        // Ordenado por receita gerada (decrescente): Ana primeiro.
+        $performance->assertJsonPath('0.professional_name', 'Ana Souza');
+        $performance->assertJsonPath('0.completed_count', 3);
+        $performance->assertJsonPath('0.avulso_count', 2);
+        $performance->assertJsonPath('0.plano_count', 1);
+        $performance->assertJsonPath('0.gross_cents', 18000);
+        $performance->assertJsonPath('0.commission_percentage', 50);
+        $performance->assertJsonPath('0.commission_cents', 9000);
+
+        $performance->assertJsonPath('1.professional_name', 'Rafael Souza');
+        $performance->assertJsonPath('1.completed_count', 1);
+        $performance->assertJsonPath('1.avulso_count', 1);
+        $performance->assertJsonPath('1.plano_count', 0);
+        $performance->assertJsonPath('1.gross_cents', 6000);
+        $performance->assertJsonPath('1.commission_cents', 2400);
+    }
+
+    public function test_team_performance_excludes_inactive_professionals(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Desempenho Inativo', 'owner-desempenho-inativo@example.com');
+
+        $professionalId = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Ana Souza',
+        ])->assertCreated()->json('id');
+
+        $this->actingWithToken($ownerToken)->patchJson("/api/professionals/{$professionalId}", [
+            'is_active' => false,
+        ])->assertOk();
+
+        $this->actingWithToken($ownerToken)->getJson('/api/dashboard/team-performance')
+            ->assertOk()
+            ->assertJsonCount(0);
+    }
+
     private function professionalWithLogin(string $ownerToken, string $email, array $workingHours = []): array
     {
         $professionalId = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [

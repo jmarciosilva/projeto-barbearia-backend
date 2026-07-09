@@ -130,9 +130,11 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::post('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'storeAdvance']);
 
         // Painel Inteligente do Proprietario (roadmap Fase 4): resumo do dia,
-        // ocupacao da equipe e inteligencia de retorno de clientes.
+        // ocupacao da equipe, desempenho da equipe e inteligencia de retorno
+        // de clientes.
         Route::get('/dashboard/summary', [OwnerDashboardController::class, 'summary']);
         Route::get('/dashboard/occupancy', [OwnerDashboardController::class, 'occupancy']);
+        Route::get('/dashboard/team-performance', [OwnerDashboardController::class, 'teamPerformance']);
         Route::get('/dashboard/return-risk', [OwnerDashboardController::class, 'returnRisk']);
     });
 });

@@ -161,6 +161,54 @@ class OwnerDashboardController extends Controller
         })->values();
     }
 
+    /**
+     * Desempenho da equipe no mes corrente (roadmap Fase 4): mesma
+     * agregacao ja usada no extrato individual do profissional
+     * (ProfessionalFinanceController::statement), so que para todos os
+     * profissionais ativos numa unica resposta, ordenada por receita gerada
+     * — o dono ve quem esta performando bem sem precisar abrir um por um.
+     */
+    public function teamPerformance(Request $request)
+    {
+        $tenantId = $this->tenantId($request);
+        $monthStart = CarbonImmutable::now()->startOfMonth();
+        $monthEnd = CarbonImmutable::now()->endOfMonth();
+
+        $professionals = Professional::where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $appointments = Appointment::where('tenant_id', $tenantId)
+            ->whereIn('professional_id', $professionals->pluck('id'))
+            ->where('status', 'completed')
+            ->whereBetween('starts_at', [$monthStart, $monthEnd])
+            ->with('service')
+            ->get()
+            ->groupBy('professional_id');
+
+        $result = $professionals->map(function (Professional $professional) use ($appointments) {
+            $professionalAppointments = $appointments->get($professional->id, collect());
+            $avulsoAppointments = $professionalAppointments->whereNull('client_subscription_id');
+            $planoAppointments = $professionalAppointments->whereNotNull('client_subscription_id');
+            $grossCents = (int) $professionalAppointments->sum(fn (Appointment $appointment) => $appointment->service?->price_cents ?? 0);
+            $commissionPercentage = $professional->commission_percentage ?? 0;
+
+            return [
+                'professional_id' => $professional->id,
+                'professional_name' => $professional->name,
+                'completed_count' => $professionalAppointments->count(),
+                'avulso_count' => $avulsoAppointments->count(),
+                'plano_count' => $planoAppointments->count(),
+                'gross_cents' => $grossCents,
+                'commission_percentage' => $commissionPercentage,
+                'commission_cents' => (int) round($grossCents * ($commissionPercentage / 100)),
+            ];
+        });
+
+        return $result->sortByDesc('gross_cents')->values();
+    }
+
     public function returnRisk(Request $request)
     {
         $tenantId = $this->tenantId($request);
