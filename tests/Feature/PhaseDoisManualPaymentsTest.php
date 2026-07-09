@@ -76,6 +76,140 @@ class PhaseDoisManualPaymentsTest extends TestCase
             ->assertJsonPath('remaining_cents', 0);
     }
 
+    public function test_professional_confirms_payment_of_own_avulso_appointment(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Confirma Profissional', 'owner-confirma-prof@example.com');
+
+        $serviceId = $this->actingWithToken($ownerToken)->postJson('/api/services', [
+            'name' => 'Corte',
+            'duration_minutes' => 30,
+            'price_cents' => 6000,
+        ])->assertCreated()->json('id');
+
+        $professionalId = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Ana Souza',
+            'email' => 'ana-confirma-prof@example.com',
+            'password' => 'senhaforte1',
+        ])->assertCreated()->json('id');
+
+        $clientId = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Cliente Avulso Confirma',
+            'phone' => '11988883333',
+        ])->assertCreated()->json('id');
+
+        $appointmentId = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $clientId,
+            'professional_id' => $professionalId,
+            'service_id' => $serviceId,
+            'starts_at' => now()->addDay(),
+        ])->assertCreated()->json('id');
+
+        $professionalToken = $this->postJson('/api/auth/login', [
+            'email' => 'ana-confirma-prof@example.com',
+            'password' => 'senhaforte1',
+        ])->assertOk()->json('token');
+
+        $completed = $this->actingWithToken($professionalToken)
+            ->postJson("/api/appointments/{$appointmentId}/complete")
+            ->assertOk();
+
+        $paymentId = $completed->json('payment.id');
+
+        $this->actingWithToken($professionalToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'pix',
+        ])->assertOk()
+            ->assertJsonPath('status', 'paid')
+            ->assertJsonPath('method', 'pix');
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'paid',
+            'method' => 'pix',
+        ]);
+    }
+
+    public function test_professional_cannot_confirm_payment_of_another_professionals_appointment(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Confirma Cruzado', 'owner-confirma-cruzado@example.com');
+
+        $serviceId = $this->actingWithToken($ownerToken)->postJson('/api/services', [
+            'name' => 'Corte',
+            'duration_minutes' => 30,
+            'price_cents' => 6000,
+        ])->assertCreated()->json('id');
+
+        $professionalAId = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Profissional A',
+            'email' => 'prof-a-confirma@example.com',
+            'password' => 'senhaforte1',
+        ])->assertCreated()->json('id');
+
+        $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Profissional B',
+            'email' => 'prof-b-confirma@example.com',
+            'password' => 'senhaforte1',
+        ])->assertCreated();
+
+        $clientId = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Cliente Avulso Cruzado',
+            'phone' => '11988884444',
+        ])->assertCreated()->json('id');
+
+        $appointmentId = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $clientId,
+            'professional_id' => $professionalAId,
+            'service_id' => $serviceId,
+            'starts_at' => now()->addDay(),
+        ])->assertCreated()->json('id');
+
+        $completed = $this->actingWithToken($ownerToken)
+            ->postJson("/api/appointments/{$appointmentId}/complete")
+            ->assertOk();
+
+        $paymentId = $completed->json('payment.id');
+
+        $professionalBToken = $this->postJson('/api/auth/login', [
+            'email' => 'prof-b-confirma@example.com',
+            'password' => 'senhaforte1',
+        ])->assertOk()->json('token');
+
+        $this->actingWithToken($professionalBToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'pix',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_professional_cannot_confirm_payment_not_tied_to_an_appointment(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Confirma Assinatura', 'owner-confirma-assinatura@example.com');
+
+        $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Ana Souza',
+            'email' => 'ana-confirma-assinatura@example.com',
+            'password' => 'senhaforte1',
+        ])->assertCreated();
+
+        $paymentId = $this->pendingSubscriptionPayment($ownerToken, 'pix');
+
+        $professionalToken = $this->postJson('/api/auth/login', [
+            'email' => 'ana-confirma-assinatura@example.com',
+            'password' => 'senhaforte1',
+        ])->assertOk()->json('token');
+
+        $this->actingWithToken($professionalToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'pix',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'pending',
+        ]);
+    }
+
     private function pendingSubscriptionPayment(string $ownerToken, string $method): int
     {
         $serviceId = $this->actingWithToken($ownerToken)->postJson('/api/services', [

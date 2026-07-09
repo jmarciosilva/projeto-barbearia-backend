@@ -105,6 +105,10 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::post('/appointments/{appointment}/complete', [AppointmentController::class, 'complete']);
         // Transformar uma entrada da fila em agendamento e decisao exclusiva do staff.
         Route::post('/waitlist/{waitlistEntry}/assign', [WaitlistController::class, 'assign']);
+        // Profissional confirma o pagamento do proprio atendimento avulso logo apos
+        // concluir (mesma tela do dono); PaymentController::markPaid restringe ao
+        // proprio atendimento quando quem chama e professional.
+        Route::post('/payments/{payment}/mark-paid', [PaymentController::class, 'markPaid']);
     });
 
     // Gestao de catalogo, financeiro e estabelecimento e exclusiva do proprietario.
@@ -120,7 +124,6 @@ Route::middleware(['auth:sanctum', 'plan.active'])->group(function () {
         Route::apiResource('subscription-plans', SubscriptionPlanController::class)->only(['store', 'update']);
         Route::apiResource('client-subscriptions', ClientSubscriptionController::class)->only(['update']);
         Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
-        Route::post('/payments/{payment}/mark-paid', [PaymentController::class, 'markPaid']);
         Route::post('/payments/{payment}/receipts', [PaymentController::class, 'receive']);
         Route::get('/professionals/{professional}/finance', [ProfessionalFinanceController::class, 'show']);
         Route::get('/professionals/{professional}/advances', [ProfessionalFinanceController::class, 'advances']);

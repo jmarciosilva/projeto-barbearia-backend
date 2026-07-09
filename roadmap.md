@@ -132,6 +132,7 @@ Objetivo: profissionalizar a cobranca manual da primeira versao: o dono confirma
 - [x] Extrato de comissao do profissional por semana/mes
 - [x] Gestao de adiantamentos ao profissional
 - [x] Configuracao de dia de pagamento dos profissionais
+- [x] Profissional confirma o pagamento do proprio atendimento avulso logo apos concluir (restrito ao proprio atendimento)
 - [ ] Disparo de notificacao push (FCM) para confirmacao de agendamento e lembrete de vencimento (spec 3.2/4.3, tier Basico) — job assincrono, guarda o token de aparelho por usuario
 
 ### Criterios de aceite
@@ -142,6 +143,7 @@ Objetivo: profissionalizar a cobranca manual da primeira versao: o dono confirma
 - [x] Testes automatizados cobrindo todas as modalidades manuais
 - [x] Testes automatizados cobrindo recebimento parcial de fiado
 - [x] Testes automatizados cobrindo extrato de comissao e adiantamento
+- [x] Profissional consegue confirmar pagamento so do proprio atendimento, nunca do atendimento de outro colega nem de pagamento sem atendimento vinculado (ex: assinatura)
 
 ### Auditoria da fase
 
@@ -150,6 +152,7 @@ Objetivo: profissionalizar a cobranca manual da primeira versao: o dono confirma
 | 2026-07-04 | Codex | Em andamento | Escopo corrigido a pedido do usuario: primeira versao nao integra gateway; pagamento e manual pelo dono. Backend passa a exigir modalidade em `POST /payments/{id}/mark-paid`, aceitando `pix`, `credit_card`, `debit_card`, `cash` e `fiado`; `fiado` registra a modalidade mas mantem `status=pending` e nao preenche `paid_at` | Falta cobrir todas as modalidades em testes e criar visao operacional dedicada para fiados |
 | 2026-07-04 | Codex | Parcial aprovado | Fiado ganhou recebimentos parciais em `payment_receipts` e endpoint `POST /payments/{id}/receipts`; cliente ganhou `GET /me/payments`; profissional ganhou extrato `GET /me/professional/finance`; dono ganhou consulta de extrato por profissional, lancamento de adiantamento e configuracao de `professional_payment_day`; `php artisan test` passou com 52/52 testes | Falta notificacao push FCM e validacao em dispositivo real |
 | 2026-07-07 | Claude | Parcial aprovado | Usuario pediu que o profissional visse, no proprio painel, os rendimentos em valores realizados no mes e quantos atendimentos fez (avulso vs. plano). `ProfessionalFinanceController::statement()` ganhou `avulso_count`/`plano_count` (contagem de atendimentos concluidos no periodo com/sem `client_subscription_id`) e `avulso_revenue_cents`/`plano_revenue_cents` (mesmo `service.price_cents` ja usado no `gross_cents`, separado por origem) — 1 teste novo em `PhaseDoisProfessionalFinanceTest` cobrindo o split (81/81 testes de backend passando). Consumido pelo app na tela inicial do profissional (roadmap mobile, Fase 4) | Sem validacao ponta a ponta em ambiente real ainda |
+| 2026-07-09 | Claude | Aprovado | Usuario pediu que, ao concluir um atendimento, o profissional tambem fosse direto pra confirmacao do meio de pagamento, igual ja acontecia com o dono — ate aqui `POST /payments/{payment}/mark-paid` era `role:owner` exclusivo, entao o app escondia o atalho pro profissional de proposito. Rota movida pro grupo `role:owner,professional`; `PaymentController::markPaid` ganhou checagem de posse quando quem chama e `professional` (mesmo padrao ja usado em `AppointmentController::complete`): so autoriza quando `payment->appointment->professional->user_id` bate com o usuario autenticado, o que tambem barra de quebra qualquer pagamento sem atendimento vinculado (ex: pagamento de assinatura), ja que nesse caso a relacao e nula. 3 testes novos em `PhaseDoisManualPaymentsTest` (confirma o proprio, rejeita atendimento de colega, rejeita pagamento sem atendimento) — 88/88 testes de backend passando | Sem validacao ponta a ponta em ambiente real ainda — usuario prefere validar manualmente |
 
 ## Fase 3 - Onboarding e Autocadastro
 

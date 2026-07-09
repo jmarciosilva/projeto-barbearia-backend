@@ -107,6 +107,17 @@ class PaymentController extends Controller
     {
         abort_if($payment->tenant_id !== $this->tenantId($request), 404);
 
+        // Profissional so confirma o pagamento do proprio atendimento avulso (mesma
+        // regra ja aplicada em AppointmentController::complete); pagamento sem
+        // atendimento vinculado (ex: assinatura) tambem fica fora do alcance dele.
+        if ($request->user()->role === 'professional') {
+            abort_if(
+                $payment->appointment?->professional?->user_id !== $request->user()->id,
+                403,
+                'Voce so pode confirmar pagamento dos proprios atendimentos.'
+            );
+        }
+
         $data = $request->validate([
             'method' => ['required', Rule::in(['pix', 'credit_card', 'debit_card', 'cash', 'fiado'])],
         ]);
