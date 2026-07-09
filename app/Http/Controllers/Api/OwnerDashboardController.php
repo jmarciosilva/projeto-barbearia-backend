@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\ClientSubscription;
 use App\Models\Payment;
 use App\Models\Professional;
+use App\Models\ProfessionalAdvance;
 use App\Models\ProfessionalScheduleOverride;
 use App\Models\WaitlistEntry;
 use Carbon\CarbonImmutable;
@@ -187,12 +188,23 @@ class OwnerDashboardController extends Controller
             ->get()
             ->groupBy('professional_id');
 
-        $result = $professionals->map(function (Professional $professional) use ($appointments) {
+        // Mesmo recorte de adiantamentos do mes ja usado no extrato individual
+        // (ProfessionalFinanceController::statement), pra "Comissoes
+        // profissionais" mostrar o valor a receber sem abrir um por um.
+        $advances = ProfessionalAdvance::where('tenant_id', $tenantId)
+            ->whereIn('professional_id', $professionals->pluck('id'))
+            ->whereBetween('paid_at', [$monthStart, $monthEnd])
+            ->get()
+            ->groupBy('professional_id');
+
+        $result = $professionals->map(function (Professional $professional) use ($appointments, $advances) {
             $professionalAppointments = $appointments->get($professional->id, collect());
             $avulsoAppointments = $professionalAppointments->whereNull('client_subscription_id');
             $planoAppointments = $professionalAppointments->whereNotNull('client_subscription_id');
             $grossCents = (int) $professionalAppointments->sum(fn (Appointment $appointment) => $appointment->service?->price_cents ?? 0);
             $commissionPercentage = $professional->commission_percentage ?? 0;
+            $commissionCents = (int) round($grossCents * ($commissionPercentage / 100));
+            $advancesCents = (int) $advances->get($professional->id, collect())->sum('amount_cents');
 
             return [
                 'professional_id' => $professional->id,
@@ -202,7 +214,9 @@ class OwnerDashboardController extends Controller
                 'plano_count' => $planoAppointments->count(),
                 'gross_cents' => $grossCents,
                 'commission_percentage' => $commissionPercentage,
-                'commission_cents' => (int) round($grossCents * ($commissionPercentage / 100)),
+                'commission_cents' => $commissionCents,
+                'advances_cents' => $advancesCents,
+                'net_cents' => max(0, $commissionCents - $advancesCents),
             ];
         });
 

@@ -338,6 +338,11 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
             'starts_at' => now()->startOfMonth()->addDays(6),
         ])->assertCreated();
 
+        // Adiantamento de Ana este mes: entra no valor a receber (9000 - 3000 = 6000).
+        $this->actingWithToken($ownerToken)->postJson("/api/professionals/{$topProfessionalId}/advances", [
+            'amount_cents' => 3000,
+        ])->assertCreated();
+
         $performance = $this->actingWithToken($ownerToken)->getJson('/api/dashboard/team-performance')->assertOk();
 
         // Ordenado por receita gerada (decrescente): Ana primeiro.
@@ -348,6 +353,8 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
         $performance->assertJsonPath('0.gross_cents', 18000);
         $performance->assertJsonPath('0.commission_percentage', 50);
         $performance->assertJsonPath('0.commission_cents', 9000);
+        $performance->assertJsonPath('0.advances_cents', 3000);
+        $performance->assertJsonPath('0.net_cents', 6000);
 
         $performance->assertJsonPath('1.professional_name', 'Rafael Souza');
         $performance->assertJsonPath('1.completed_count', 1);
@@ -355,6 +362,8 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
         $performance->assertJsonPath('1.plano_count', 0);
         $performance->assertJsonPath('1.gross_cents', 6000);
         $performance->assertJsonPath('1.commission_cents', 2400);
+        $performance->assertJsonPath('1.advances_cents', 0);
+        $performance->assertJsonPath('1.net_cents', 2400);
     }
 
     public function test_team_performance_excludes_inactive_professionals(): void
