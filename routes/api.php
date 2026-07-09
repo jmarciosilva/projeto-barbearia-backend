@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\AdminDashboardController;
+use App\Http\Controllers\Api\AdminTenantController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
@@ -35,6 +37,18 @@ Route::get('/tenants/directory', [TenantController::class, 'directory']);
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+// Area administrativa da plataforma (roadmap Fase 5): 2 contas fixas hoje,
+// criadas via `php artisan admin:create`, sem tenant proprio (`tenant_id`
+// null). Opera fora de qualquer tenant, entao nunca usa UsesTenant nem passa
+// pelo bloqueio de trial (`plan.active`), que so faz sentido pra quem tem
+// um tenant.
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+    Route::get('/dashboard', [AdminDashboardController::class, 'summary']);
+    Route::get('/tenants', [AdminTenantController::class, 'index']);
+    Route::patch('/tenants/{tenant}/founder', [AdminTenantController::class, 'toggleFounder']);
+    Route::post('/tenants/{tenant}/subscription/extend', [AdminTenantController::class, 'extendSubscription']);
+});
 
 // `plan.active` bloqueia escrita quando o trial de 30 dias vence sem o dono
 // escolher um plano pago (spec 3.1); leitura nunca e afetada.

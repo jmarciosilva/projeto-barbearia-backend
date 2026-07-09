@@ -20,6 +20,7 @@ class Tenant extends Model
         'state',
         'timezone',
         'status',
+        'is_founder',
         'invite_code',
         'units_count',
         'professional_payment_day',
@@ -28,6 +29,13 @@ class Tenant extends Model
         'break_start_time',
         'break_end_time',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_founder' => 'boolean',
+        ];
+    }
 
     protected static function booted(): void
     {
@@ -91,6 +99,11 @@ class Tenant extends Model
     public function professionalAdvances(): HasMany
     {
         return $this->hasMany(ProfessionalAdvance::class);
+    }
+
+    public function adminSubscriptionGrants(): HasMany
+    {
+        return $this->hasMany(AdminSubscriptionGrant::class);
     }
 
     public function saasSubscription(): HasOne
