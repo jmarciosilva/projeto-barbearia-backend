@@ -104,11 +104,63 @@ class PhaseQuatroOwnerDashboardTest extends TestCase
         $summary->assertJsonPath('waitlist_count', 1);
         $summary->assertJsonPath('expected_revenue_today_cents', 12000);
         $summary->assertJsonPath('recurring_revenue_month_cents', 9990);
-        $summary->assertJsonPath('walkin_revenue_month_cents', 6000);
+        // 6000 (avulso confirmado na hora) + 2000 (recebimento parcial do
+        // fiado, ja entrou no caixa mesmo o fiado ainda nao estando quitado).
+        $summary->assertJsonPath('walkin_revenue_month_cents', 8000);
         // 6000 (preco do servico) - 2000 (recebido parcial) = 4000 em aberto.
         // O avulso pendente comum (linha ~32, method=pix default) nao entra
         // nessa soma, so o que o dono marcou como fiado de fato.
         $summary->assertJsonPath('open_debt_cents', 4000);
+    }
+
+    public function test_walkin_revenue_does_not_double_count_a_fiado_quitado_via_multiple_receipts(): void
+    {
+        $ownerToken = $this->ownerToken('Salao Receita Fiado', 'owner-receita-fiado@example.com');
+
+        $service = $this->actingWithToken($ownerToken)->postJson('/api/services', [
+            'name' => 'Corte masculino',
+            'duration_minutes' => 30,
+            'price_cents' => 6000,
+        ])->assertCreated()->json('id');
+
+        $professional = $this->actingWithToken($ownerToken)->postJson('/api/professionals', [
+            'name' => 'Ana Souza',
+        ])->assertCreated()->json('id');
+
+        $client = $this->actingWithToken($ownerToken)->postJson('/api/clients', [
+            'name' => 'Carlos Mendes',
+            'phone' => '11988880011',
+        ])->assertCreated()->json('id');
+
+        $appointment = $this->actingWithToken($ownerToken)->postJson('/api/appointments', [
+            'client_id' => $client,
+            'professional_id' => $professional,
+            'service_id' => $service,
+            'starts_at' => now()->setTime(9, 0),
+        ])->assertCreated();
+        $paymentId = $appointment->json('payment.id');
+
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/mark-paid", [
+            'method' => 'fiado',
+        ])->assertOk();
+
+        // Dois recebimentos parciais que somam o valor cheio (6000): o
+        // segundo quita o fiado (Payment.status vira paid), mas a receita do
+        // mes deve contar 6000 uma unica vez (via os recibos), nao 6000 +
+        // 6000 (recibos + Payment.amount_cents de novo).
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/receipts", [
+            'amount_cents' => 4000,
+            'method' => 'pix',
+        ])->assertOk();
+        $this->actingWithToken($ownerToken)->postJson("/api/payments/{$paymentId}/receipts", [
+            'amount_cents' => 2000,
+            'method' => 'pix',
+        ])->assertOk()->assertJsonPath('status', 'paid');
+
+        $summary = $this->actingWithToken($ownerToken)->getJson('/api/dashboard/summary')->assertOk();
+
+        $summary->assertJsonPath('walkin_revenue_month_cents', 6000);
+        $summary->assertJsonPath('open_debt_cents', 0);
     }
 
     public function test_occupancy_uses_professional_working_hours_and_this_weeks_appointments(): void
